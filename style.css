@@ -113,10 +113,11 @@ body { margin: 0; overflow: hidden; font-family: var(--sans); -webkit-user-selec
   .pop-head { width: 100%; visibility: visible; background: rgba(38,38,38,.82); }
   .pop-body {
     background: rgba(26,26,26,.8);
-    flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center;
-    padding: 32px 26px; font-size: 17px; text-align: left;
+    flex: 1; min-height: 0; display: flex; flex-direction: column;
+    padding: 0 26px; font-size: clamp(14px, 2.6vh, 17px); text-align: left;
   }
-  .pop-body .txt { max-height: 100%; }
+  /* auto margins centre the text when it fits, and let it scroll with equal padding top and bottom when it does not */
+  .pop-body .txt { margin: auto 0; padding: 32px 0; }
   #app.help-open #ui .tile:not(#helpBtn) { visibility: hidden; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
