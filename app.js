@@ -875,7 +875,7 @@ function pasteClip() {
 /* tiles snap to grid cells: each one covers span x span cells */
 function layoutUI() {
   const { cols, cellW, cellH } = grid();
-  const k = cellH < 20 ? 3 : 2;                   // short screens (landscape phones) use 3x3-cell tiles
+  const k = 2 * Math.min(cellW, cellH) >= 30 ? 2 : 3;   // 2x2-cell tiles; 3x3 only when cells are tiny (landscape phones)
   const inset = Math.max(2, Math.min(4, cellH * 0.12));
   const tw = k * cellW - 2 * inset, th = k * cellH - 2 * inset;
   $('ui').style.setProperty('--t', Math.min(tw, th) + 'px');
@@ -925,7 +925,8 @@ function layoutUI() {
     place('helpBtn', rightCol, m);
     place('scaleBtn', scaleCol, m);
     lay(tempo, m, m + k + 1);
-    lay(size, cols - m - 3 * k, m + k + 1);
+    if (cols - m - 3 * k >= m + 3 * k + 1) lay(size, cols - m - 3 * k, m + k + 1);
+    else lay(size, m, m + 2 * (k + 1));
   }
   LAYOUT = { span: k, cellW, cellH, inset, m, rightCol, bottomRow, tw, th, delX: (rightCol - 1) * cellW, delY: (bottomRow - 1) * cellH };
   const pop = $('pop');
