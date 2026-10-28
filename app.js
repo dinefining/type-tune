@@ -34,20 +34,23 @@ const SCALES = {
   diminished: [0,1,3,4,6,7,9,10], diminished2: [0,2,3,5,6,8,9,11],
   chromatic: [0,1,2,3,4,5,6,7,8,9,10,11],
 };
-const BANDS = 30;
-const ROOT_MIDI = 36;   // C2
-const MIDI_HIGH = 96;   // C7: higher notes fold down by octaves
-// band i (0 = lowest) climbs the scale one degree per row from the root
-function scaleFreqs(name) {
-  const iv = SCALES[name], n = iv.length, out = [];
-  for (let i = 0; i < BANDS; i++) {
-    let midi = ROOT_MIDI + iv[i % n] + 12 * Math.floor(i / n);
-    while (midi > MIDI_HIGH) midi -= 12;
-    out.push(440 * Math.pow(2, (midi - 69) / 12));
+const BANDS = 48;        // grid rows: finer than the pitch set, so letter shapes are sampled in more detail
+const LOW_MIDI = 36;     // C2
+const HIGH_MIDI = 96;    // C7
+// Every note of the scale between C2 and C7, low to high. Rows are spread evenly over these notes
+// (bottom row = C2, top row = C7), so a finer grid adds detail without pushing pitches out of range.
+function scaleNotes(name) {
+  const iv = SCALES[name], out = [];
+  for (let midi = LOW_MIDI; midi <= HIGH_MIDI; midi++) {
+    if (iv.includes((midi - LOW_MIDI) % 12)) out.push(440 * Math.pow(2, (midi - 69) / 12));
   }
   return out;
 }
-let SCALE = scaleFreqs('minPent');
+function rowNotes(count) {   // row index from the bottom -> note index
+  return Array.from({ length: BANDS }, (_, r) => Math.round(r * (count - 1) / (BANDS - 1)));
+}
+let NOTES = scaleNotes('minPent');
+let ROWNOTE = rowNotes(NOTES.length);
 const SCALE_SHORT = {
   minPent: 'Min Pent', majPent: 'Maj Pent', ritusen: 'Ritu Sen', egyptian: 'Egyp Tian', kumai: 'Ku Mai',
   hirajoshi: 'Hira Josh', iwato: 'Iwa To', chinese: 'Chin Ese', indian: 'Ind Ian', pelog: 'Pe Log',
@@ -85,18 +88,20 @@ const VOICES = {
            oscs: [{ type: 'sine', ratio: 1, gain: 1 }, { type: 'sine', ratio: 3.98, gain: 0.12 }],
            filter: { base: 4, amt: 2500, decay: 0.05, Q: 0.7 } },
 };
-// note length: gate as a multiple of one step; 'tie' holds a note across consecutive steps without re-striking it
-const LENGTHS = {
-  short:  { label: 'Short',  gate: 0.35, tie: false, rel: 0.6 },
-  medium: { label: 'Medium', gate: 0.95, tie: false, rel: 1.0 },
-  long:   { label: 'Long',   gate: 1.8,  tie: false, rel: 1.4 },
-  legato: { label: 'Legato', gate: 1.0,  tie: true,  rel: 1.6 },
+// note length comes from a 0..1 slider: short gate -> long gate; at the top (>= 0.8) notes tie across steps (legato)
+const lengthParams = v => ({ gate: 0.3 + v * 2.2, tie: v >= 0.8, rel: 0.6 + v * 1.6 });
+const LENGTH_NAME = v => v < 0.25 ? 'Short' : v < 0.55 ? 'Medium' : v < 0.8 ? 'Long' : 'Legato';
+// how a column of active cells becomes notes
+const MODES = {
+  chord:  { label: 'Chord' },    // every active note at once
+  arp:    { label: 'Arpeggio' }, // each letter stroke (run of adjacent notes) once, low to high, spread across the step
+  melody: { label: 'Melody' },   // only the highest note: the top outline of the text becomes a melody line
 };
-const VOICE_ORDER = Object.keys(VOICES), LENGTH_ORDER = Object.keys(LENGTHS);
+const VOICE_ORDER = Object.keys(VOICES), MODE_ORDER = Object.keys(MODES);
 
 const audio = {
   ctx: null, master: null, comp: null, wet: null, dry: null, bands: [], held: [], running: false,
-  voice: 'keys', length: 'legato',
+  voice: 'keys', len: 0.85, mode: 'chord', lastMelody: -1,
   init() {
     if (!this.ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -139,10 +144,10 @@ const audio = {
       if (b.mod) try { b.mod.osc.stop(t + 0.2); } catch (e) {}
       setTimeout(() => { try { b.out.disconnect(); } catch (e) {} }, 400);
     });
-    this.bands = []; this.held = new Array(BANDS).fill(false);
+    this.bands = []; this.held = new Array(NOTES.length).fill(false); this.lastMelody = -1;
     this.wet.gain.setTargetAtTime(v.wet, t, 0.1);
-    for (let i = 0; i < BANDS; i++) {
-      const f = SCALE[i];
+    for (let i = 0; i < NOTES.length; i++) {
+      const f = NOTES[i];
       const env = ctx.createGain(); env.gain.value = 0;
       const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
       let head = env;
@@ -172,7 +177,7 @@ const audio = {
         mod = { osc: mo, gain: mg };
       }
       let out = env;
-      if (pan) { pan.pan.value = (i / (BANDS - 1)) * 1.6 - 0.8; env.connect(pan); out = pan; }
+      if (pan) { pan.pan.value = (i / Math.max(1, NOTES.length - 1)) * 1.6 - 0.8; env.connect(pan); out = pan; }
       out.connect(this.master);
       this.bands.push({ env, filter, oscs, mod, out, f });
     }
@@ -182,7 +187,8 @@ const audio = {
     this.voice = name;
     if (this.ctx) this.buildVoices();
   },
-  setLength(name) { if (LENGTHS[name]) { this.length = name; if (this.ctx) this.releaseAll(0.15); } },
+  setLength(v) { const wasTie = lengthParams(this.len).tie; this.len = v; if (this.ctx && wasTie !== lengthParams(v).tie) this.releaseAll(0.15); },
+  setMode(m) { if (MODES[m]) { this.mode = m; if (this.ctx) this.releaseAll(0.12); } },
   // metronome click: dry, bright and loud enough to cut through the notes (accent on the downbeat)
   tick(accent) {
     if (!this.ctx) return;
@@ -196,71 +202,97 @@ const audio = {
     o.connect(hp); hp.connect(g); g.connect(this.ctx.destination);
     o.start(t); o.stop(t + 0.06);
   },
-  setScale(freqs) {
-    if (!this.ctx) return;
-    const t = this.ctx.currentTime, v = VOICES[this.voice];
-    this.bands.forEach((b, i) => {
-      b.f = freqs[i];
-      b.oscs.forEach(o => o.osc.frequency.setTargetAtTime(freqs[i] * o.ratio, t, 0.02));
-      if (b.mod) b.mod.osc.frequency.setTargetAtTime(freqs[i] * v.fm.ratio, t, 0.02);
-      if (b.filter) b.filter.frequency.setTargetAtTime(Math.min(freqs[i] * v.filter.base, 18000), t, 0.05);
-    });
-  },
-  noteOn(b, now, vel, stepSec) {
-    const v = VOICES[this.voice], L = LENGTHS[this.length];
+  setScale() { if (this.ctx) this.buildVoices(); },
+  // unit = length of one step (or one arp slot) in seconds
+  noteOn(b, t, vel, unit, P) {
+    const v = VOICES[this.voice];
     const g = b.env.gain, peak = v.peak * vel;
-    const A = Math.min(v.A, stepSec * 0.6);
-    g.cancelScheduledValues(now);
-    g.setValueAtTime(g.value, now);
-    g.linearRampToValueAtTime(peak, now + A);
-    g.setTargetAtTime(peak * v.S, now + A, v.D / 3);
+    const A = Math.min(v.A, unit * 0.6);
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(peak, t + A);
+    g.setTargetAtTime(peak * v.S, t + A, v.D / 3);
     if (b.filter && v.filter) {
       const fq = b.filter.frequency, base = Math.min(b.f * v.filter.base, 18000);
       const top = Math.min(base + v.filter.amt * vel, v.filter.max || 18000);
-      fq.cancelScheduledValues(now);
-      fq.setValueAtTime(Math.max(fq.value, 20), now);
-      fq.linearRampToValueAtTime(top, now + Math.max(A, 0.008));
-      fq.setTargetAtTime(base, now + A, v.filter.decay / 3);
+      fq.cancelScheduledValues(t);
+      fq.setValueAtTime(Math.max(fq.value, 20), t);
+      fq.linearRampToValueAtTime(top, t + Math.max(A, 0.008));
+      fq.setTargetAtTime(base, t + A, v.filter.decay / 3);
     }
     if (b.mod) {
       const mg = b.mod.gain.gain, idx = b.f * v.fm.ratio * v.fm.index * (0.6 + 0.4 * vel);
-      mg.cancelScheduledValues(now);
-      mg.setValueAtTime(idx, now);
-      mg.setTargetAtTime(idx * 0.08, now, v.fm.decay / 3);
+      mg.cancelScheduledValues(t);
+      mg.setValueAtTime(idx, t);
+      mg.setTargetAtTime(idx * 0.08, t, v.fm.decay / 3);
     }
-    if (!L.tie) g.setTargetAtTime(0, now + Math.max(A, L.gate * stepSec), v.R * L.rel / 3);
+    if (!P.tie) g.setTargetAtTime(0, t + Math.max(A, P.gate * unit), v.R * P.rel / 3);
   },
-  noteOff(b, now) {
-    const v = VOICES[this.voice], L = LENGTHS[this.length];
+  noteOff(b, t) {
+    const v = VOICES[this.voice], P = lengthParams(this.len);
     const g = b.env.gain;
-    g.cancelScheduledValues(now);
-    g.setValueAtTime(g.value, now);
-    g.setTargetAtTime(0, now, v.R * L.rel / 3);
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(g.value, t);
+    g.setTargetAtTime(0, t, v.R * P.rel / 3);
   },
-  // densities[row]: row 0 = top of screen = highest pitch
-  update(densities, stepSec) {
+  // rowDens[row]: row 0 = top of screen. Rows are folded onto notes (loudest row wins).
+  update(rowDens, stepSec) {
     if (!this.ctx || !this.running) return;
-    const now = this.ctx.currentTime, L = LENGTHS[this.length], v = VOICES[this.voice];
+    const now = this.ctx.currentTime, P = lengthParams(this.len), v = VOICES[this.voice];
+    const nd = new Array(NOTES.length).fill(0);
     for (let row = 0; row < BANDS; row++) {
-      const d = densities[row] || 0;
-      const i = BANDS - 1 - row, b = this.bands[i];
-      if (!b) continue;
-      const on = d > 0.05, vel = 0.45 + 0.55 * Math.min(1, d);
-      if (L.tie) {
-        if (on && !this.held[i]) this.noteOn(b, now, vel, stepSec);
-        else if (on && v.S > 0) b.env.gain.setTargetAtTime(v.peak * vel * Math.max(v.S, 0.5), now, 0.08);   // swell, no re-strike
-        else if (!on && this.held[i]) this.noteOff(b, now);
-        this.held[i] = on;
-      } else if (on) {
-        this.noteOn(b, now, vel, stepSec);
-      }
+      const d = rowDens[row] || 0, j = ROWNOTE[BANDS - 1 - row];
+      if (d > nd[j]) nd[j] = d;
     }
+    // fewer simultaneous notes in arp / melody, so each one is louder to keep the overall level even
+    const boost = this.mode === 'melody' ? 2.4 : this.mode === 'arp' ? 1.6 : 1;
+    const vel = j => (0.45 + 0.55 * Math.min(1, nd[j])) * boost;
+    const active = nd.map((d, j) => d > 0.05 ? j : -1).filter(j => j >= 0);
+
+    if (this.mode === 'chord') {
+      for (let j = 0; j < NOTES.length; j++) {
+        const on = nd[j] > 0.05, b = this.bands[j];
+        if (!b) continue;
+        if (P.tie) {
+          if (on && !this.held[j]) this.noteOn(b, now, vel(j), stepSec, P);
+          else if (on && v.S > 0) b.env.gain.setTargetAtTime(v.peak * vel(j) * Math.max(v.S, 0.5), now, 0.08);
+          else if (!on && this.held[j]) this.noteOff(b, now);
+          this.held[j] = on;
+        } else if (on) this.noteOn(b, now, vel(j), stepSec, P);
+      }
+      return;
+    }
+
+    if (this.mode === 'melody') {                       // a single line: the highest active note
+      const top = active.length ? active[active.length - 1] : -1, last = this.lastMelody;
+      if (P.tie) {
+        if (top === last && top >= 0) { if (v.S > 0) this.bands[top].env.gain.setTargetAtTime(v.peak * vel(top) * Math.max(v.S, 0.5), now, 0.08); }
+        else {
+          if (last >= 0) this.noteOff(this.bands[last], now);
+          if (top >= 0) this.noteOn(this.bands[top], now, vel(top), stepSec, P);
+        }
+      } else if (top >= 0) this.noteOn(this.bands[top], now, vel(top), stepSec, P);
+      this.lastMelody = top;
+      return;
+    }
+
+    // arpeggio: each run of adjacent notes (one letter stroke) plays its top note, low to high across the step
+    let notes = [];
+    for (let i = 0; i < active.length; i++) {
+      if (i === active.length - 1 || active[i + 1] !== active[i] + 1) notes.push(active[i]);
+    }
+    const MAX = 6;
+    if (notes.length > MAX) notes = Array.from({ length: MAX }, (_, i) => notes[Math.round(i * (notes.length - 1) / (MAX - 1))]);
+    if (!notes.length) return;
+    const slot = stepSec / notes.length;
+    const AP = { gate: P.gate, tie: false, rel: P.rel };     // arp notes never tie; the slider sets how much they overlap
+    notes.forEach((j, n) => this.noteOn(this.bands[j], now + n * slot, vel(j), slot, AP));
   },
   releaseAll(tc) {
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
     this.bands.forEach(b => { b.env.gain.cancelScheduledValues(now); b.env.gain.setTargetAtTime(0, now, tc); });
-    this.held = new Array(BANDS).fill(false);
+    this.held = new Array(NOTES.length).fill(false); this.lastMelody = -1;
   },
   play() { this.init(); this.running = true; },
   stop() { this.running = false; this.releaseAll(0.1); }
@@ -282,7 +314,8 @@ const S = {
   mode: 'W_E',
   scale: 'minPent',
   voice: 'keys',
-  length: 'legato',
+  len: 0.85,
+  pmode: 'chord',     // chord / arp / melody (S.mode is the scan direction)
   beat: 0,
   progress: 0,
   drag: null,                    // {target, startX, startY, offsets, moved}
@@ -671,6 +704,7 @@ function nearLoop(px, py) {
 
 stage.addEventListener('pointerdown', e => {
   if (e.button !== 0) return;
+  if (!$('lenPanel').hidden) { toggleLen(false); e.preventDefault(); return; }
   if (!$('menu').hidden) { toggleMenu(false); e.preventDefault(); return; }
   if (!$('pop').hidden) { toggleHelp(false); e.preventDefault(); return; }
   e.preventDefault();
@@ -844,6 +878,7 @@ stage.addEventListener('pointercancel', pointerEnd);
 /* ───────────────────────── keyboard ───────────────────────── */
 window.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
+    if (!$('lenPanel').hidden) { toggleLen(false); return; }
     if (!$('menu').hidden) { toggleMenu(false); return; }
     if (!$('pop').hidden) { toggleHelp(false); return; }
     endEdit();
@@ -979,11 +1014,12 @@ function pasteClip() {
 /* tiles snap to grid cells: each one covers span x span cells */
 function layoutUI() {
   const { cols, cellW, cellH } = grid();
-  const k = 2 * Math.min(cellW, cellH) >= 30 ? 2 : 3;   // 2x2-cell tiles; 3x3 only when cells are tiny (landscape phones)
+  const k = Math.max(2, Math.min(5, Math.round(42 / Math.min(cellW, cellH))));   // tiles cover k x k cells, ~42px
   const inset = Math.max(2, Math.min(4, cellH * 0.12));
   const tw = k * cellW - 2 * inset, th = k * cellH - 2 * inset;
   $('ui').style.setProperty('--t', Math.min(tw, th) + 'px');
   $('menu').style.setProperty('--t', Math.min(tw, th) + 'px');
+  $('lenPanel').style.setProperty('--t', Math.min(tw, th) + 'px');
   const placeEl = (el, col, row) => {
     el.style.transform = `translate(${col * cellW + inset}px, ${row * cellH + inset}px)`;
     el.style.width = tw + 'px'; el.style.height = th + 'px';
@@ -1003,17 +1039,13 @@ function layoutUI() {
   const lay = (ids, start, row) => ids.forEach((id, i) => place(id, start + i * k, row));
   const tempo = ['bpmDown', 'bpmVal', 'bpmUp'], size = ['sizeDown', 'sizeVal', 'sizeUp'];
   const scaleCol = Math.floor((cols - k) / 2);
-  // centre: sound | scale | length (trio), or the scale alone with sound + length tucked underneath
-  const tryTop = (gaps, limit, trio) => {
-    const half = trio ? k : 0;
+  // top: tempo | sound scale mode length | size. On narrower screens the centre four drop to their own row.
+  const centre = ['voiceBtn', 'scaleBtn', 'modeBtn', 'lenBtn'];
+  const cStart = Math.floor((cols - 4 * k) / 2);
+  const oneRow = (gaps, limit) => {
     for (const g of gaps) {
-      const left = scaleCol - half - g - 3 * k, right = scaleCol + k + half + g;
-      if (left >= m && right + 3 * k <= limit) {
-        lay(tempo, left, m); place('scaleBtn', scaleCol, m); lay(size, right, m);
-        if (trio) { place('voiceBtn', scaleCol - k, m); place('lenBtn', scaleCol + k, m); }
-        else { const pc = scaleCol - Math.floor(k / 2); place('voiceBtn', pc, m + k); place('lenBtn', pc + k, m + k); }
-        return true;
-      }
+      const left = cStart - g - 3 * k, right = cStart + 4 * k + g;
+      if (left >= m && right + 3 * k <= limit) { lay(tempo, left, m); lay(centre, cStart, m); lay(size, right, m); return true; }
     }
     return false;
   };
@@ -1024,23 +1056,22 @@ function layoutUI() {
   place('metroBtn', playCol + k, bottomRow);
 
   let helpOnTop = true;
-  const topGaps = [Math.round(3 * k / 2), k, Math.ceil(k / 2)];
   const helpBottom = () => { helpOnTop = false; place('helpBtn', playCol + 2 * k, bottomRow); };   // phones: ? right of the metronome
-  if (tryTop(topGaps, rightCol - 1, true)) {
+  const topGaps = [Math.round(3 * k / 2), k, Math.ceil(k / 2)];
+  if (oneRow(topGaps, rightCol - 1)) {
     place('helpBtn', rightCol, m);
-  } else if (playCol + 3 * k <= rightCol && tryTop([Math.ceil(k / 2), 0], cols - m, true)) {
+  } else if (playCol + 3 * k <= rightCol && oneRow([Math.ceil(k / 2), 0], cols - m)) {
     helpBottom();
-  } else if (tryTop(topGaps, rightCol - 1, false)) {
+  } else if (m + 6 * k + 1 <= rightCol - 1) {          // tempo left, size right, ? top-right; centre four on the next row
     place('helpBtn', rightCol, m);
-  } else if (playCol + 3 * k <= rightCol && tryTop([Math.ceil(k / 2), 0], cols - m, false)) {
-    helpBottom();
-  } else {                                          // very narrow: scale on top, tempo + size below
+    lay(tempo, m, m);
+    lay(size, rightCol - 1 - 3 * k, m);
+    lay(centre, cStart, m + k + 1);
+  } else {                                             // very narrow: everything stacked
     place('helpBtn', rightCol, m);
-    place('scaleBtn', scaleCol, m);
-    place('voiceBtn', scaleCol - k - 1, m); place('lenBtn', scaleCol + k + 1, m);
-    lay(tempo, m, m + k + 1);
-    if (cols - m - 3 * k >= m + 3 * k + 1) lay(size, cols - m - 3 * k, m + k + 1);
-    else lay(size, m, m + 2 * (k + 1));
+    lay(tempo, m, m);
+    lay(size, m, m + k + 1);
+    lay(centre, Math.max(m, cStart), m + 2 * (k + 1));
   }
   LAYOUT = { span: k, cellW, cellH, inset, m, rightCol, bottomRow, tw, th, delX: (rightCol - 1) * cellW, delY: (bottomRow - 1) * cellH };
   const pop = $('pop');
@@ -1057,7 +1088,7 @@ function layoutUI() {
 
   // scale menu: grid of tiles hanging under the scale tile, sized so every scale fits on screen
   const names = Object.keys(SCALES);
-  const topIds = ['bpmDown', 'bpmVal', 'bpmUp', 'sizeDown', 'sizeVal', 'sizeUp', 'scaleBtn', 'voiceBtn', 'lenBtn'];
+  const topIds = ['bpmDown', 'bpmVal', 'bpmUp', 'sizeDown', 'sizeVal', 'sizeUp', 'scaleBtn', 'voiceBtn', 'modeBtn', 'lenBtn'];
   const topEnd = Math.max(...topIds.map(id => POS[id].row)) + k + 1;
   const availRows = Math.max(1, Math.floor((bottomRow - 1 - topEnd) / k));
   const maxCols = Math.max(1, Math.floor((cols - 2 * m) / k));
@@ -1070,6 +1101,7 @@ function layoutUI() {
     placeEl(el, startCol + (i % ncols) * k, startRow + Math.floor(i / ncols) * k);
   });
   fitScaleLabel();
+  placeLenPanel();
 }
 
 /* scale tile + menu */
@@ -1077,7 +1109,7 @@ function fitLabel(el, name) {
   el.innerHTML = (SCALE_SHORT[name] || name).split(' ').map(w => `<span>${w}</span>`).join('');
   el.title = `${scaleWords(name)} (${SCALES[name].length} notes)`;
 }
-function fitScaleLabel() { fitLabel($('scaleBtn'), S.scale); }
+function fitScaleLabel() { const n = scaleWords(S.scale); $('scaleBtn').title = `Scale: ${n}`; $('scaleBtn').setAttribute('aria-label', `Scale: ${n}`); }
 function buildMenu() {
   const menu = $('menu');
   menu.innerHTML = Object.keys(SCALES).map(nm =>
@@ -1093,15 +1125,16 @@ function buildMenu() {
 function setScale(name) {
   if (!SCALES[name]) return;
   S.scale = name;
-  SCALE = scaleFreqs(name);
-  audio.setScale(SCALE);
+  NOTES = scaleNotes(name);
+  ROWNOTE = rowNotes(NOTES.length);
+  audio.setScale();
   fitScaleLabel();
   syncUI();
 }
 function toggleMenu(force) {
   const menu = $('menu');
   const open = typeof force === 'boolean' ? force : menu.hidden;
-  if (open) toggleHelp(false);
+  if (open) { toggleHelp(false); toggleLen(false); }
   menu.hidden = !open;
   $('scaleBtn').classList.toggle('open', open);
   $('scaleBtn').setAttribute('aria-expanded', open);
@@ -1135,7 +1168,7 @@ function editBpm() {
 
 // keep chrome clicks from reaching the canvas or stealing the text caret
 stage.addEventListener('mousedown', e => e.preventDefault());
-for (const el of [$('ui'), $('pop'), $('menu')]) {
+for (const el of [$('ui'), $('pop'), $('menu'), $('lenPanel')]) {
   el.addEventListener('mousedown', e => { if (S.editingId) e.preventDefault(); });
 }
 $('playBtn').onclick = togglePlay;
@@ -1150,34 +1183,89 @@ $('metroBtn').onclick = () => {
   syncUI();
 };
 $('copyBtn').onclick = copySelection;
-// sound + note length: tap to cycle; when stopped, a short phrase previews the change
-const LEN_ICON = { short: 'M2 19L5 5L8 19', medium: 'M2 19L4 5L13 19', long: 'M2 19L4 5L22 19', legato: 'M2 19L5 6H19L22 19' };
-let previewTimer = null;
+// icons
+const VOICE_ICON = {
+  keys:  '<path d="M2 12C4.5 3 7.5 3 12 12S19.5 21 22 12"/>',
+  pad:   '<path d="M2 13.5C5 6.5 9 6.5 12 13.5S19 20.5 22 13.5"/><path d="M2 10.5C5 3.5 9.5 3.5 12.5 10.5S19.5 17 22 10.5" opacity=".45"/>',
+  bell:  '<path d="M2 12C3 2.5 5 2.5 6 12S8.5 19 9.5 12 11.5 6.5 12.5 12 14 15.6 15 12 16.4 9.8 17.2 12H22"/>',
+  organ: '<path d="M2 8C5 3.5 9 3.5 12 8S19 12.5 22 8"/><path d="M2 17C3.3 14.5 4.7 14.5 6 17S8.7 19.5 10 17 12.7 14.5 14 17 16.7 19.5 18 17 20.7 14.5 22 17"/>',
+  wood:  '<path d="M2 12H7C8 3.5 10 3.5 11 12S13 16.5 14 12H22"/>',
+  pluck: '<path d="M2 16H7V8H12V16H17V8H22"/>',
+};
+const MODE_ICON = {
+  chord:  '<circle cx="12" cy="4.6" r="3.4"/><circle cx="12" cy="12" r="3.4"/><circle cx="12" cy="19.4" r="3.4"/>',
+  arp:    '<circle cx="4.6" cy="19.4" r="3.4"/><circle cx="12" cy="12" r="3.4"/><circle cx="19.4" cy="4.6" r="3.4"/>',
+  melody: '<circle cx="8.5" cy="17.5" r="3.4"/><path d="M11.9 17.5V3.5L18 6.5"/>',
+};
+const lenIcon = v => { const p = 6 + v * 10, d = p + 2 + v * 1.5; return `M3 20L6 4H${p.toFixed(1)}L${d.toFixed(1)} 20H22`; };
+
+// sound / mode: tap to cycle; when stopped, a short phrase previews the change
+let previewTimers = [];
 function previewSound() {
   if (S.playing) return;
   audio.init();
-  const run = audio.running; audio.running = true;
-  const L = LENGTHS[audio.length], step = 0.22;
-  const phrase = [[12], [12], [14], [15, 10]];                   // a few steps on mid-range bands
-  clearTimeout(previewTimer);
+  previewTimers.forEach(clearTimeout); previewTimers = [];
+  audio.running = true;
   audio.releaseAll(0.05);
-  phrase.forEach((bands, n) => setTimeout(() => {
+  const N = NOTES.length, c = Math.floor(N / 2), step = 0.3;
+  const phrase = [[c - 4, c, c + 3], [c - 4, c, c + 3], [c - 2, c + 2, c + 5], [c - 5, c - 1, c + 4]];
+  const rowsFor = notes => {
     const d = new Array(BANDS).fill(0);
-    bands.forEach(i => { d[BANDS - 1 - i] = 0.8; });
-    audio.update(d, step);
-  }, n * step * 1000));
-  previewTimer = setTimeout(() => { audio.update(new Array(BANDS).fill(0), step); audio.running = run || S.playing; }, phrase.length * step * 1000);
+    notes.forEach(j => { const r = ROWNOTE.indexOf(Math.max(0, Math.min(N - 1, j))); if (r >= 0) d[BANDS - 1 - r] = 0.8; });
+    return d;
+  };
+  phrase.forEach((notes, n) => previewTimers.push(setTimeout(() => audio.update(rowsFor(notes), step), n * step * 1000)));
+  previewTimers.push(setTimeout(() => { audio.update(new Array(BANDS).fill(0), step); audio.running = S.playing; }, phrase.length * step * 1000));
 }
 $('voiceBtn').onclick = () => {
   S.voice = VOICE_ORDER[(VOICE_ORDER.indexOf(S.voice) + 1) % VOICE_ORDER.length];
   audio.setVoice(S.voice);
   syncUI(); previewSound();
 };
-$('lenBtn').onclick = () => {
-  S.length = LENGTH_ORDER[(LENGTH_ORDER.indexOf(S.length) + 1) % LENGTH_ORDER.length];
-  audio.setLength(S.length);
+$('modeBtn').onclick = () => {
+  S.pmode = MODE_ORDER[(MODE_ORDER.indexOf(S.pmode) + 1) % MODE_ORDER.length];
+  audio.setMode(S.pmode);
   syncUI(); previewSound();
 };
+
+// note length: the tile opens a vertical slider (top = legato, bottom = short)
+function placeLenPanel() {
+  const P = POS.lenBtn; if (!P) return;
+  const { cellW, cellH, inset, span: k, bottomRow } = LAYOUT;
+  const rows = Math.max(3 * k, Math.min(6 * k, bottomRow - 1 - (P.row + k)));
+  const el = $('lenPanel');
+  el.style.left = (P.col * cellW + inset) + 'px';
+  el.style.top = ((P.row + k) * cellH + inset) + 'px';
+  el.style.width = (k * cellW - 2 * inset) + 'px';
+  el.style.height = (rows * cellH - 2 * inset) + 'px';
+}
+function toggleLen(force) {
+  const el = $('lenPanel'), open = typeof force === 'boolean' ? force : el.hidden;
+  if (open) { toggleMenu(false); toggleHelp(false); placeLenPanel(); }
+  el.hidden = !open;
+  $('lenBtn').classList.toggle('open', open);
+  $('lenBtn').setAttribute('aria-expanded', open);
+}
+function setLen(v, preview) {
+  S.len = Math.max(0, Math.min(1, v));
+  audio.setLength(S.len);
+  syncUI();
+  if (preview) previewSound();
+}
+$('lenBtn').onclick = () => toggleLen();
+(() => {
+  const el = $('lenPanel'), track = el.querySelector('.track');
+  const valAt = e => { const r = track.getBoundingClientRect(); return 1 - (e.clientY - r.top) / r.height; };
+  let dragging = false;
+  el.addEventListener('pointerdown', e => { e.preventDefault(); dragging = true; el.setPointerCapture(e.pointerId); setLen(valAt(e)); });
+  el.addEventListener('pointermove', e => { if (dragging) setLen(valAt(e)); });
+  const end = e => { if (!dragging) return; dragging = false; setLen(valAt(e), true); };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', () => { dragging = false; });
+  el.addEventListener('keydown', e => {
+    const d = { ArrowUp: 0.05, ArrowRight: 0.05, ArrowDown: -0.05, ArrowLeft: -0.05 }[e.key];
+    if (d) { e.preventDefault(); e.stopPropagation(); setLen(S.len + d, true); }
+  });
+})();
 $('pasteBtn').onclick = pasteClip;
 $('trash').onclick = deleteSelection;
 $('helpBtn').onclick = () => { toggleMenu(false); toggleHelp(); };
@@ -1196,11 +1284,18 @@ function syncUI() {
   }
   $('dirBtn').querySelector('svg').style.transform = `rotate(${DIR_ANGLE[S.mode]}deg)`;
   if (!$('bpmIn')) $('bpmVal').firstElementChild.textContent = S.bpm;
-  $('voiceVal').textContent = VOICES[S.voice].label;
-  $('voiceBtn').title = `Sound: ${VOICES[S.voice].label} (tap to change)`;
-  $('lenPath').setAttribute('d', LEN_ICON[S.length]);
-  $('lenBtn').title = `Note length: ${LENGTHS[S.length].label} (tap to change)`;
-  $('lenBtn').setAttribute('aria-label', `Note length: ${LENGTHS[S.length].label}`);
+  $('voiceIcon').innerHTML = VOICE_ICON[S.voice];
+  $('voiceBtn').title = `Sound: ${VOICES[S.voice].label}`;
+  $('voiceBtn').setAttribute('aria-label', `Sound: ${VOICES[S.voice].label}`);
+  $('modeIcon').innerHTML = MODE_ICON[S.pmode];
+  $('modeBtn').title = MODES[S.pmode].label;
+  $('modeBtn').setAttribute('aria-label', `Play as: ${MODES[S.pmode].label}`);
+  $('lenPath').setAttribute('d', lenIcon(S.len));
+  $('lenBtn').title = `Note length: ${LENGTH_NAME(S.len)}`;
+  $('lenBtn').setAttribute('aria-label', `Note length: ${LENGTH_NAME(S.len)}`);
+  { const lp = $('lenPanel'), pc = Math.round(S.len * 100);
+    lp.querySelector('.fill').style.height = pc + '%'; lp.querySelector('.thumb').style.bottom = pc + '%';
+    lp.setAttribute('aria-valuenow', pc); lp.setAttribute('aria-valuetext', LENGTH_NAME(S.len)); }
   $('metroBtn').classList.toggle('on', S.metronome);
   $('metroBtn').setAttribute('aria-pressed', S.metronome);
 
