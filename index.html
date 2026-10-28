@@ -25,12 +25,8 @@
 
   <div id="ui">
     <button class="tile" id="dirBtn" type="button" aria-label="Change scan direction" title="Scan direction"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h20M14 4l8 8-8 8"/></svg></button>
-    <button class="tile" id="bpmDown" type="button" aria-label="Slower" title="Slower"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h20"/></svg></button>
-    <button class="tile" id="bpmVal" type="button" aria-label="Tempo, click to type" title="Click to type a tempo"><span>240</span><span>BPM</span></button>
-    <button class="tile" id="bpmUp" type="button" aria-label="Faster" title="Faster"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M2 12h20"/></svg></button>
-    <button class="tile" id="sizeDown" type="button" aria-label="Smaller text" title="Smaller text" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h20"/></svg></button>
-    <div class="tile ro" id="sizeVal"><span>Size</span></div>
-    <button class="tile" id="sizeUp" type="button" aria-label="Larger text" title="Larger text" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M2 12h20"/></svg></button>
+    <button class="tile" id="bpmVal" type="button" aria-label="Tempo" aria-expanded="false" title="Tempo"><span>240</span><span>BPM</span></button>
+    <button class="tile" id="sizeVal" type="button" aria-label="Text size" aria-expanded="false" title="Text size (select text first)" disabled><span>Size</span></button>
     <button class="tile" id="metroBtn" type="button" aria-pressed="false" aria-label="Metronome" title="Metronome"><span>M</span><span>Nome</span></button>
     <button class="tile" id="voiceBtn" type="button" aria-label="Sound" aria-expanded="false" title="Sound"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15H11V21H4Z M11 15V3H19V8H11"/></svg></button>
     <button class="tile" id="scaleBtn" type="button" aria-label="Scale" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21V15H9V9H15V3H21V21Z"/></svg></button>
@@ -46,6 +42,14 @@
   <div id="menu" role="listbox" aria-label="Scale" hidden></div>
   <div id="vmenu" role="listbox" aria-label="Sound" hidden></div>
 
+  <div id="bpmPanel" class="slider" role="slider" aria-label="Tempo" tabindex="0" hidden>
+    <input class="sval" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" aria-label="Type a tempo">
+    <div class="track"><div class="fill"></div><div class="thumb"></div></div>
+  </div>
+  <div id="sizePanel" class="slider" role="slider" aria-label="Text size" tabindex="0" hidden>
+    <input class="sval" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" aria-label="Type a text size">
+    <div class="track"><div class="fill"></div><div class="thumb"></div></div>
+  </div>
   <div id="lenPanel" class="slider" role="slider" aria-label="Note length" aria-valuemin="0" aria-valuemax="100" tabindex="0" hidden>
     <div class="track"><div class="fill"></div><div class="thumb"></div></div>
   </div>
@@ -60,7 +64,7 @@
       <span>Copy and Paste duplicate the selection. Or hold Alt/Opt and drag.</span><br>
       <span>Tap Del, press Delete, or drag text into the bottom-right corner to delete it.</span><br>
       <span>Drag the loop lines to set the playback range.</span><br>
-      <span>Click the BPM to type a tempo. Pick a scale from the middle tile.</span><br>
+      <span>BPM and Size open sliders: drag, or tap the number to type one. Pick a scale from the middle tile.</span><br>
       <span>Around it: the sound tile (showing its name) picks an instrument, the squares tile switches between chords, arpeggios and a single melody line, and the envelope tile opens a slider from short, separate notes up to legato.</span><br><br>
       <span class="credit">A <a href="https://maybemachines.com" target="_blank" rel="noopener" style="color:#D946EF;">Maybe Machine</a> by <a href="https://ravipopat.info" target="_blank" rel="noopener" style="color:#06B6D4;">Ravi Popat</a>.</span>
     </div></div>

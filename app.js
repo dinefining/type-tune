@@ -343,8 +343,7 @@ window.addEventListener('resize', resize);
 /* ───────────────────────── grid geometry ───────────────────────── */
 function grid() {
   const cellH = H / BANDS;
-  let cols = Math.max(1, Math.round(W / cellH));
-  if (cols < 16 && W / cellH >= 16 * 0.82) cols = 16;   // phones: cells up to ~18% narrower than tall
+  const cols = Math.max(2, 2 * Math.round(W / cellH / 2));   // always even, so centred groups sit exactly on the grid
   return { cols, cellW: W / cols, cellH };
 }
 function stepsFor(mode) {
@@ -702,7 +701,7 @@ function nearLoop(px, py) {
 
 stage.addEventListener('pointerdown', e => {
   if (e.button !== 0) return;
-  if (!$('lenPanel').hidden) { toggleLen(false); e.preventDefault(); return; }
+  if (anySliderOpen()) { closeSliders(); e.preventDefault(); return; }
   if (!$('vmenu').hidden) { toggleVoiceMenu(false); e.preventDefault(); return; }
   if (!$('menu').hidden) { toggleMenu(false); e.preventDefault(); return; }
   if (!$('pop').hidden) { toggleHelp(false); e.preventDefault(); return; }
@@ -877,7 +876,7 @@ stage.addEventListener('pointercancel', pointerEnd);
 /* ───────────────────────── keyboard ───────────────────────── */
 window.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    if (!$('lenPanel').hidden) { toggleLen(false); return; }
+    if (anySliderOpen()) { closeSliders(); return; }
     if (!$('vmenu').hidden) { toggleVoiceMenu(false); return; }
     if (!$('menu').hidden) { toggleMenu(false); return; }
     if (!$('pop').hidden) { toggleHelp(false); return; }
@@ -960,7 +959,7 @@ function sizeHelpPanel() {
   const body = pop.querySelector('.pop-body');
   pop.style.height = 'auto'; body.style.flex = 'none'; body.style.height = 'auto';
   const need = k * cellH + body.scrollHeight + inset;
-  const rows = Math.min(LAYOUT.bottomRow - hp.row - 1, Math.ceil(need / cellH));
+  const rows = Math.min(LAYOUT.floorRow - hp.row - 1, Math.ceil(need / cellH));
   pop.style.height = (rows * cellH - 2 * inset) + 'px';
   body.style.flex = ''; body.style.height = '';
 }
@@ -1020,7 +1019,7 @@ function layoutUI() {
   $('ui').style.setProperty('--t', Math.min(tw, th) + 'px');
   $('menu').style.setProperty('--t', Math.min(tw, th) + 'px');
   $('vmenu').style.setProperty('--t', Math.min(tw, th) + 'px');
-  $('lenPanel').style.setProperty('--t', Math.min(tw, th) + 'px');
+  ['lenPanel', 'bpmPanel', 'sizePanel'].forEach(id => $(id).style.setProperty('--t', Math.min(tw, th) + 'px'));
   const placeEl = (el, col, row) => {
     el.style.transform = `translate(${col * cellW + inset}px, ${row * cellH + inset}px)`;
     el.style.width = tw + 'px'; el.style.height = th + 'px';
@@ -1038,50 +1037,41 @@ function layoutUI() {
   place('trash', rightCol, bottomRow);
 
   const lay = (ids, start, row) => ids.forEach((id, i) => place(id, start + i * k, row));
-  const tempo = ['bpmDown', 'bpmVal', 'bpmUp'], size = ['sizeDown', 'sizeVal', 'sizeUp'];
   const scaleCol = Math.floor((cols - k) / 2);
-  // top: tempo | sound scale mode length | size. On narrower screens the centre four drop to their own row.
+  // top: BPM | sound scale mode length | SIZE, as one centred group
   const centre = ['voiceBtn', 'scaleBtn', 'modeBtn', 'lenBtn'];
   const cStart = Math.floor((cols - 4 * k) / 2);
-  const oneRow = (gaps, limit) => {
+  const topRow = (gaps, limit) => {
     for (const g of gaps) {
-      const left = cStart - g - 3 * k, right = cStart + 4 * k + g;
-      if (left >= m && right + 3 * k <= limit) { lay(tempo, left, m); lay(centre, cStart, m); lay(size, right, m); return true; }
+      const left = cStart - g - k, right = cStart + 4 * k + g;
+      if (left >= m && right + k <= limit) { place('bpmVal', left, m); lay(centre, cStart, m); place('sizeVal', right, m); return true; }
     }
     return false;
   };
-  // bottom centre: direction | play | metronome (play under the scale tile)
-  const playCol = Math.max(m + 3 * k, scaleCol);
-  place('dirBtn', playCol - k, bottomRow);
-  place('playBtn', playCol, bottomRow);
-  place('metroBtn', playCol + k, bottomRow);
-
-  let helpOnTop = true;
-  const helpBottom = () => { helpOnTop = false; place('helpBtn', playCol + 2 * k, bottomRow); };   // phones: ? right of the metronome
-  const topGaps = [Math.round(3 * k / 2), k, Math.ceil(k / 2)];
-  if (oneRow(topGaps, rightCol - 1)) {
-    place('helpBtn', rightCol, m);
-  } else if (playCol + 3 * k <= rightCol && oneRow([Math.ceil(k / 2), 0], cols - m)) {
-    helpBottom();
-  } else if (m + 6 * k + 1 <= rightCol - 1) {          // tempo left, size right, ? top-right; centre four on the next row
-    place('helpBtn', rightCol, m);
-    lay(tempo, m, m);
-    lay(size, rightCol - 1 - 3 * k, m);
-    lay(centre, cStart, m + k + 1);
-  } else {                                             // very narrow: everything stacked
-    place('helpBtn', rightCol, m);
-    lay(tempo, m, m);
-    lay(size, m, m + k + 1);
-    lay(centre, Math.max(m, cStart), m + 2 * (k + 1));
+  const gaps = [2 * k, k, Math.ceil(k / 2), 1, 0];
+  let helpOnTop = true, floorRow = bottomRow;        // floorRow: the highest bottom-row of tiles (menus and panels stop above it)
+  if (topRow(gaps, rightCol - 1)) {
+    place('helpBtn', rightCol, m);                       // desktop: ? top-right; bottom: direction | play | metronome
+    lay(['dirBtn', 'playBtn', 'metroBtn'], Math.floor((cols - 3 * k) / 2), bottomRow);
+  } else {
+    // phones: ? moves next to the metronome; bottom: direction | play | metronome | ?
+    helpOnTop = false;
+    const transport = ['dirBtn', 'playBtn', 'metroBtn', 'helpBtn'], tStart = (cols - 4 * k) / 2;
+    if (tStart >= m + 2 * k && tStart + 4 * k <= rightCol) lay(transport, tStart, bottomRow);
+    else { floorRow = bottomRow - k - 1; lay(transport, tStart, floorRow); }   // its own centred row above copy / paste / DEL
+    if (!topRow(gaps, cols - m)) {                       // very narrow: BPM + SIZE at the edges, centre four below
+      place('bpmVal', m, m); place('sizeVal', cols - m - k, m);
+      lay(centre, Math.max(m, cStart), m + k + 1);
+    }
   }
-  LAYOUT = { span: k, cellW, cellH, inset, m, rightCol, bottomRow, tw, th, delX: (rightCol - 1) * cellW, delY: (bottomRow - 1) * cellH };
+  LAYOUT = { span: k, cellW, cellH, inset, m, rightCol, bottomRow, floorRow, tw, th, delX: (rightCol - 1) * cellW, delY: (bottomRow - 1) * cellH };
   const pop = $('pop');
   // help overlay text lines up with the tile grid
   pop.style.setProperty('--pt', (m * cellH + inset) + 'px');
   pop.style.setProperty('--pl', (m * cellW + inset) + 'px');
   pop.style.setProperty('--pr', (W - rightCol * cellW + cellW) + 'px');
   pop.style.setProperty('--pb', ((BANDS - bottomRow - k) * cellH + inset) + 'px');
-  pop.style.setProperty('--pbb', ((BANDS - bottomRow) * cellH + inset) + 'px');
+  pop.style.setProperty('--pbb', ((BANDS - floorRow) * cellH + inset) + 'px');
   pop.style.setProperty('--xw', tw + 'px');
   pop.style.setProperty('--xh', th + 'px');
   pop.style.setProperty('--t', Math.min(tw, th) + 'px');
@@ -1089,9 +1079,9 @@ function layoutUI() {
 
   // scale menu: grid of tiles hanging under the scale tile, sized so every scale fits on screen
   const names = Object.keys(SCALES);
-  const topIds = ['bpmDown', 'bpmVal', 'bpmUp', 'sizeDown', 'sizeVal', 'sizeUp', 'scaleBtn', 'voiceBtn', 'modeBtn', 'lenBtn'];
+  const topIds = ['bpmVal', 'sizeVal', 'scaleBtn', 'voiceBtn', 'modeBtn', 'lenBtn'];
   const topEnd = Math.max(...topIds.map(id => POS[id].row)) + k + 1;
-  const availRows = Math.max(1, Math.floor((bottomRow - 1 - topEnd) / k));
+  const availRows = Math.max(1, Math.floor((floorRow - topEnd) / k));
   const maxCols = Math.max(1, Math.floor((cols - 2 * m) / k));
   const ncols = Math.min(maxCols, Math.max(6, Math.ceil(names.length / availRows)));
   const nrows = Math.ceil(names.length / ncols);
@@ -1106,7 +1096,7 @@ function layoutUI() {
   const vStart = Math.max(m, Math.floor((cols - vcols * k) / 2));
   vItems.forEach((el, i) => placeEl(el, vStart + (i % vcols) * k, startRow + Math.floor(i / vcols) * k));
   fitScaleLabel();
-  placeLenPanel();
+  placeSliders();
 }
 
 /* scale tile + menu */
@@ -1139,7 +1129,7 @@ function setScale(name) {
 function toggleMenu(force) {
   const menu = $('menu');
   const open = typeof force === 'boolean' ? force : menu.hidden;
-  if (open) { toggleHelp(false); toggleLen(false); toggleVoiceMenu(false); }
+  if (open) { toggleHelp(false); closeSliders(); toggleVoiceMenu(false); }
   menu.hidden = !open;
   $('scaleBtn').classList.toggle('open', open);
   $('scaleBtn').setAttribute('aria-expanded', open);
@@ -1147,41 +1137,14 @@ function toggleMenu(force) {
 }
 
 /* typing a tempo into the BPM tile */
-function editBpm() {
-  if ($('bpmIn')) return;
-  const tile = $('bpmVal');
-  tile.innerHTML = `<input id="bpmIn" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="${S.bpm}" aria-label="Tempo in BPM"><span>BPM</span>`;
-  const inp = $('bpmIn');
-  inp.focus();
-  inp.select();
-  let done = false;
-  const finish = commit => {
-    if (done) return; done = true;
-    const v = parseInt(inp.value, 10);
-    if (commit && Number.isFinite(v)) S.bpm = Math.max(10, Math.min(999, v));
-    tile.innerHTML = `<span>${S.bpm}</span><span>BPM</span>`;
-    syncUI();
-  };
-  inp.addEventListener('keydown', e => {
-    e.stopPropagation();
-    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
-    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
-  });
-  inp.addEventListener('input', () => { inp.value = inp.value.replace(/[^0-9]/g, ''); });
-  inp.addEventListener('blur', () => finish(true));
-}
 
 // keep chrome clicks from reaching the canvas or stealing the text caret
 stage.addEventListener('mousedown', e => e.preventDefault());
-for (const el of [$('ui'), $('pop'), $('menu'), $('vmenu'), $('lenPanel')]) {
-  el.addEventListener('mousedown', e => { if (S.editingId) e.preventDefault(); });
+for (const el of [$('ui'), $('pop'), $('menu'), $('vmenu'), $('lenPanel'), $('bpmPanel'), $('sizePanel')]) {
+  el.addEventListener('mousedown', e => { if (S.editingId && e.target.tagName !== 'INPUT') e.preventDefault(); });
 }
 $('playBtn').onclick = togglePlay;
 $('dirBtn').onclick = cycleMode;
-$('bpmDown').onclick = () => { S.bpm = Math.max(10, S.bpm - 5); syncUI(); };
-$('bpmUp').onclick = () => { S.bpm = Math.min(999, S.bpm + 5); syncUI(); };
-$('sizeDown').onclick = () => { adjustSize(-0.01); syncUI(); };
-$('sizeUp').onclick = () => { adjustSize(0.01); syncUI(); };
 $('metroBtn').onclick = () => {
   S.metronome = !S.metronome;
   if (S.metronome) { audio.init(); audio.tick(true); }   // audible confirmation, even when stopped
@@ -1235,7 +1198,7 @@ function buildVoiceMenu() {
 }
 function toggleVoiceMenu(force) {
   const vm = $('vmenu'), open = typeof force === 'boolean' ? force : vm.hidden;
-  if (open) { toggleMenu(false); toggleHelp(false); toggleLen(false); }
+  if (open) { toggleMenu(false); toggleHelp(false); closeSliders(); }
   vm.hidden = !open;
   $('voiceBtn').classList.toggle('open', open);
   $('voiceBtn').setAttribute('aria-expanded', open);
@@ -1249,49 +1212,98 @@ $('modeBtn').onclick = () => {
   syncUI(); previewSound();
 };
 
-// note length: the tile opens a vertical slider (top = legato, bottom = short)
-function placeLenPanel() {
-  const P = POS.lenBtn; if (!P) return;
-  const { cellW, cellH, inset, span: k, bottomRow } = LAYOUT;
-  const rows = Math.max(3 * k, Math.min(6 * k, bottomRow - 1 - (P.row + k)));
-  const el = $('lenPanel');
-  el.style.left = (P.col * cellW + inset) + 'px';
-  el.style.top = ((P.row + k) * cellH + inset) + 'px';
-  el.style.width = (k * cellW - 2 * inset) + 'px';
-  el.style.height = (rows * cellH - 2 * inset) + 'px';
+// vertical sliders that drop out of their tile: note length, tempo and text size.
+// Tempo and size also have a number at the top you can tap and type into.
+const BPM_MIN = 20, BPM_MAX = 320, SIZE_MIN = 0.04, SIZE_MAX = 0.5;
+const sizeTargets = () => S.blocks.filter(b => S.selected.has(b.id) || b.id === S.editingId);
+const SLIDERS = {
+  len:  { tile: 'lenBtn', panel: 'lenPanel',
+          get: () => S.len,
+          set: v => { S.len = v; audio.setLength(v); },
+          done: () => previewSound(), text: () => LENGTH_NAME(S.len) },
+  bpm:  { tile: 'bpmVal', panel: 'bpmPanel',
+          get: () => (S.bpm - BPM_MIN) / (BPM_MAX - BPM_MIN),
+          set: v => { S.bpm = Math.round(BPM_MIN + v * (BPM_MAX - BPM_MIN)); },
+          num: () => S.bpm, type: n => { S.bpm = Math.max(10, Math.min(999, n)); }, text: () => S.bpm + ' BPM' },
+  size: { tile: 'sizeVal', panel: 'sizePanel',
+          get: () => { const b = sizeTargets()[0]; return b ? (b.fontSize - SIZE_MIN) / (SIZE_MAX - SIZE_MIN) : 0; },
+          set: v => { const fs = +(SIZE_MIN + v * (SIZE_MAX - SIZE_MIN)).toFixed(3); sizeTargets().forEach(b => { b.fontSize = fs; }); },
+          num: () => { const b = sizeTargets()[0]; return b ? Math.round(b.fontSize * 100) : ''; },
+          type: n => { const fs = Math.max(SIZE_MIN, Math.min(SIZE_MAX, n / 100)); sizeTargets().forEach(b => { b.fontSize = fs; }); },
+          text: () => 'Size ' + SLIDERS.size.num() },
+};
+function placeSliders() {
+  const { cellW, cellH, inset, span: k, floorRow } = LAYOUT || {};
+  if (!cellW) return;
+  for (const key in SLIDERS) {
+    const P = POS[SLIDERS[key].tile]; if (!P) continue;
+    const rows = Math.max(3 * k, Math.min(6 * k, floorRow - 1 - (P.row + k)));
+    const el = $(SLIDERS[key].panel);
+    el.style.left = (P.col * cellW + inset) + 'px';
+    el.style.top = ((P.row + k) * cellH + inset) + 'px';
+    el.style.width = (k * cellW - 2 * inset) + 'px';
+    el.style.height = (rows * cellH - 2 * inset) + 'px';
+  }
 }
-function toggleLen(force) {
-  const el = $('lenPanel'), open = typeof force === 'boolean' ? force : el.hidden;
-  if (open) { toggleMenu(false); toggleHelp(false); toggleVoiceMenu(false); placeLenPanel(); }
+function closeSliders(except) { for (const key in SLIDERS) if (key !== except) toggleSlider(key, false); }
+function toggleSlider(key, force) {
+  const sl = SLIDERS[key], el = $(sl.panel), tile = $(sl.tile);
+  const open = typeof force === 'boolean' ? force : el.hidden;
+  if (open) { toggleMenu(false); toggleHelp(false); toggleVoiceMenu(false); closeSliders(key); placeSliders(); }
+  if (el.hidden === !open) return;
   el.hidden = !open;
-  $('lenBtn').classList.toggle('open', open);
-  $('lenBtn').setAttribute('aria-expanded', open);
+  tile.classList.toggle('open', open);
+  tile.setAttribute('aria-expanded', open);
+  if (open) syncSliders();
 }
-function setLen(v, preview) {
-  S.len = Math.max(0, Math.min(1, v));
-  audio.setLength(S.len);
-  syncUI();
-  if (preview) previewSound();
+const anySliderOpen = () => Object.values(SLIDERS).some(sl => !$(sl.panel).hidden);
+function syncSliders() {
+  for (const key in SLIDERS) {
+    const sl = SLIDERS[key], el = $(sl.panel);
+    const pc = Math.round(Math.max(0, Math.min(1, sl.get())) * 100);
+    el.querySelector('.fill').style.height = pc + '%';
+    el.querySelector('.thumb').style.bottom = pc + '%';
+    el.setAttribute('aria-valuenow', pc);
+    el.setAttribute('aria-valuetext', sl.text());
+    const inp = el.querySelector('.sval');
+    if (inp && document.activeElement !== inp) inp.value = sl.num();
+  }
 }
-$('lenBtn').onclick = () => toggleLen();
-(() => {
-  const el = $('lenPanel'), track = el.querySelector('.track');
-  const valAt = e => { const r = track.getBoundingClientRect(); return 1 - (e.clientY - r.top) / r.height; };
+for (const key in SLIDERS) {
+  const sl = SLIDERS[key], el = $(sl.panel), track = el.querySelector('.track'), inp = el.querySelector('.sval');
+  $(sl.tile).onclick = () => toggleSlider(key);
+  const valAt = e => { const r = track.getBoundingClientRect(); return Math.max(0, Math.min(1, 1 - (e.clientY - r.top) / r.height)); };
+  const apply = v => { sl.set(Math.max(0, Math.min(1, v))); syncUI(); };
   let dragging = false;
-  el.addEventListener('pointerdown', e => { e.preventDefault(); dragging = true; el.setPointerCapture(e.pointerId); setLen(valAt(e)); });
-  el.addEventListener('pointermove', e => { if (dragging) setLen(valAt(e)); });
-  const end = e => { if (!dragging) return; dragging = false; setLen(valAt(e), true); };
-  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', () => { dragging = false; });
-  el.addEventListener('keydown', e => {
-    const d = { ArrowUp: 0.05, ArrowRight: 0.05, ArrowDown: -0.05, ArrowLeft: -0.05 }[e.key];
-    if (d) { e.preventDefault(); e.stopPropagation(); setLen(S.len + d, true); }
+  el.addEventListener('pointerdown', e => {
+    if (e.target === inp) return;                       // tapping the number types into it
+    e.preventDefault(); dragging = true; el.setPointerCapture(e.pointerId); apply(valAt(e));
   });
-})();
+  el.addEventListener('pointermove', e => { if (dragging) apply(valAt(e)); });
+  el.addEventListener('pointerup', e => { if (!dragging) return; dragging = false; apply(valAt(e)); if (sl.done) sl.done(); });
+  el.addEventListener('pointercancel', () => { dragging = false; });
+  el.addEventListener('keydown', e => {
+    if (e.target === inp) return;
+    const d = { ArrowUp: 0.02, ArrowRight: 0.02, ArrowDown: -0.02, ArrowLeft: -0.02 }[e.key];
+    if (d) { e.preventDefault(); e.stopPropagation(); apply(sl.get() + d); if (sl.done) sl.done(); }
+  });
+  if (inp) {
+    const commit = () => { const n = parseInt(inp.value, 10); if (Number.isFinite(n)) sl.type(n); inp.blur(); syncUI(); };
+    inp.addEventListener('focus', () => inp.select());
+    inp.addEventListener('input', () => { inp.value = inp.value.replace(/[^0-9]/g, ''); });
+    inp.addEventListener('keydown', e => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      else if (e.key === 'Escape') { e.preventDefault(); inp.value = sl.num(); inp.blur(); }
+    });
+    inp.addEventListener('blur', () => { const n = parseInt(inp.value, 10); if (Number.isFinite(n) && n !== sl.num()) { sl.type(n); syncUI(); } });
+  }
+}
 $('pasteBtn').onclick = pasteClip;
 $('trash').onclick = deleteSelection;
 $('helpBtn').onclick = () => { toggleMenu(false); toggleVoiceMenu(false); toggleHelp(); };
 $('scaleBtn').onclick = () => toggleMenu();
-$('bpmVal').onclick = editBpm;
+
 
 const DIR_ANGLE = { W_E: 0, E_W: 180, N_S: 90, S_N: -90, NW_SE: 45, SE_NW: -135, NE_SW: 135, SW_NE: -45 };
 const ICON_PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l15-8.5z" fill="currentColor" stroke="none"/></svg>';
@@ -1304,7 +1316,7 @@ function syncUI() {
     lastPlayIcon = S.playing;
   }
   $('dirBtn').querySelector('svg').style.transform = `rotate(${DIR_ANGLE[S.mode]}deg)`;
-  if (!$('bpmIn')) $('bpmVal').firstElementChild.textContent = S.bpm;
+  $('bpmVal').firstElementChild.textContent = S.bpm;
   $('voiceBtn').title = `Sound: ${VOICES[S.voice].label}`;
   $('voiceBtn').setAttribute('aria-label', `Sound: ${VOICES[S.voice].label}`);
   $('modeIcon').innerHTML = MODE_ICON[S.pmode];
@@ -1313,15 +1325,14 @@ function syncUI() {
   $('lenPath').setAttribute('d', lenIcon(S.len));
   $('lenBtn').title = `Note length: ${LENGTH_NAME(S.len)}`;
   $('lenBtn').setAttribute('aria-label', `Note length: ${LENGTH_NAME(S.len)}`);
-  { const lp = $('lenPanel'), pc = Math.round(S.len * 100);
-    lp.querySelector('.fill').style.height = pc + '%'; lp.querySelector('.thumb').style.bottom = pc + '%';
-    lp.setAttribute('aria-valuenow', pc); lp.setAttribute('aria-valuetext', LENGTH_NAME(S.len)); }
+  syncSliders();
   $('metroBtn').classList.toggle('on', S.metronome);
   $('metroBtn').setAttribute('aria-pressed', S.metronome);
 
   const ids = targetIds();
   const has = ids.size > 0;
-  $('sizeDown').disabled = $('sizeUp').disabled = !has;
+  $('sizeVal').disabled = !has;
+  if (!has && !$('sizePanel').hidden) toggleSlider('size', false);
   const first = S.blocks.find(b => ids.has(b.id));
   $('sizeVal').innerHTML = first ? `<span>${Math.round(first.fontSize * 100)}</span><span>Size</span>` : '<span>Size</span>';
   $('copyBtn').disabled = !has;
@@ -1335,6 +1346,15 @@ buildMenu();
 resize();
 { const st = 100 / stepsFor(S.mode); S.loopStart = st; S.loopEnd = 100 - st; snapLoops(); }
 S.blocks[0].fontSize = defaultSize();
+// make sure the starting text fits across the screen too (narrow phones), once the font has loaded
+function fitStartText() {
+  const b = S.blocks.find(x => x.id === 'init');
+  if (!b || b.text !== PLACEHOLDER) return;
+  const g = blockGeom(b), room = W * 0.86 - g.x;
+  if (g.w > room) b.fontSize = +(b.fontSize * room / g.w).toFixed(3);
+}
+fitStartText();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitStartText);
 syncUI();
 ta.readOnly = true;
 requestAnimationFrame(frame);

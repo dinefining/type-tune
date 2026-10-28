@@ -134,6 +134,13 @@ body { margin: 0; overflow: hidden; font-family: var(--sans); -webkit-user-selec
 .slider .track { position: relative; flex: 1; width: 2px; background: rgba(255,255,255,.18); }
 .slider .fill { position: absolute; left: 0; right: 0; bottom: 0; background: var(--fg); }
 .slider .thumb { position: absolute; left: 50%; width: calc(var(--t, 48px) * .56); height: 3px; background: var(--fg); transform: translate(-50%, 50%); }
-#lenBtn.open, #modeBtn.open { background: var(--opt-on); }
+#lenBtn.open, #modeBtn.open, #bpmVal.open, #sizeVal.open { background: var(--opt-on); }
+.slider { gap: calc(var(--t, 48px) * .22); }
+.slider .sval {
+  flex: none; width: 100%; box-sizing: border-box; padding: 0; margin: 0; border: 0; outline: 0; background: transparent;
+  font-family: var(--cond); font-size: calc(var(--t, 48px) * .34); color: var(--fg); text-align: center; caret-color: var(--cyan);
+  cursor: text; touch-action: manipulation;
+}
+.slider .sval:focus { color: var(--cyan); }
 #voiceBtn.open { background: var(--fg); color: var(--bg); }
 .tile svg circle { fill: none; }
