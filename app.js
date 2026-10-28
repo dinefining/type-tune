@@ -1038,14 +1038,11 @@ function layoutUI() {
 
   const lay = (ids, start, row) => ids.forEach((id, i) => place(id, start + i * k, row));
   const scaleCol = Math.floor((cols - k) / 2);
-  // top: BPM | sound scale mode length | SIZE, as one centred group
-  const centre = ['voiceBtn', 'scaleBtn', 'modeBtn', 'lenBtn'];
-  const cStart = Math.floor((cols - 4 * k) / 2);
-  const topRow = (gaps, limit) => {
-    for (const g of gaps) {
-      const left = cStart - g - k, right = cStart + 4 * k + g;
-      if (left >= m && right + k <= limit) { place('bpmVal', left, m); lay(centre, cStart, m); place('sizeVal', right, m); return true; }
-    }
+  // top: tempo, sound, scale, mode, length, size as one contiguous, centred group
+  const centre = ['bpmVal', 'voiceBtn', 'scaleBtn', 'modeBtn', 'lenBtn', 'sizeVal'];
+  const cStart = (cols - 6 * k) / 2;                    // cols is even and 6k is even, so this lands on the grid
+  const topRow = (_, limit) => {
+    if (cStart >= m && cStart + 6 * k <= limit) { lay(centre, cStart, m); return true; }
     return false;
   };
   const gaps = [2 * k, k, Math.ceil(k / 2), 1, 0];
@@ -1059,9 +1056,9 @@ function layoutUI() {
     const transport = ['dirBtn', 'playBtn', 'metroBtn', 'helpBtn'], tStart = (cols - 4 * k) / 2;
     if (tStart >= m + 2 * k && tStart + 4 * k <= rightCol) lay(transport, tStart, bottomRow);
     else { floorRow = bottomRow - k - 1; lay(transport, tStart, floorRow); }   // its own centred row above copy / paste / DEL
-    if (!topRow(gaps, cols - m)) {                       // very narrow: BPM + SIZE at the edges, centre four below
-      place('bpmVal', m, m); place('sizeVal', cols - m - k, m);
-      lay(centre, Math.max(m, cStart), m + k + 1);
+    if (!topRow(gaps, cols - m)) {                       // very narrow: two rows of three
+      lay(centre.slice(0, 3), Math.max(m, (cols - 3 * k) / 2), m);
+      lay(centre.slice(3), Math.max(m, (cols - 3 * k) / 2), m + k);
     }
   }
   LAYOUT = { span: k, cellW, cellH, inset, m, rightCol, bottomRow, floorRow, tw, th, delX: (rightCol - 1) * cellW, delY: (bottomRow - 1) * cellH };
@@ -1316,7 +1313,8 @@ function syncUI() {
     lastPlayIcon = S.playing;
   }
   $('dirBtn').querySelector('svg').style.transform = `rotate(${DIR_ANGLE[S.mode]}deg)`;
-  $('bpmVal').firstElementChild.textContent = S.bpm;
+  $('bpmVal').title = `Tempo: ${S.bpm} BPM`;
+  $('bpmVal').setAttribute('aria-label', `Tempo: ${S.bpm} BPM`);
   $('voiceBtn').title = `Sound: ${VOICES[S.voice].label}`;
   $('voiceBtn').setAttribute('aria-label', `Sound: ${VOICES[S.voice].label}`);
   $('modeIcon').innerHTML = MODE_ICON[S.pmode];
@@ -1334,7 +1332,7 @@ function syncUI() {
   $('sizeVal').disabled = !has;
   if (!has && !$('sizePanel').hidden) toggleSlider('size', false);
   const first = S.blocks.find(b => ids.has(b.id));
-  $('sizeVal').innerHTML = first ? `<span>${Math.round(first.fontSize * 100)}</span><span>Size</span>` : '<span>Size</span>';
+  $('sizeVal').title = first ? `Text size: ${Math.round(first.fontSize * 100)}` : 'Text size (select text first)';
   $('copyBtn').disabled = !has;
   $('pasteBtn').disabled = clip.length === 0;
   $('trash').classList.toggle('ready', has);
