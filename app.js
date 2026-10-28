@@ -306,7 +306,7 @@ const S = {
   marquee: null,                 // {x,y,w,h} in %
   hoverTrash: false,
   playing: false,
-  metronome: false,
+  metronome: false,     // metronome tile removed; kept off
   bpm: 240,
   loopStart: 0, loopEnd: 100,    // %
   mode: 'W_E',
@@ -1037,26 +1037,24 @@ function layoutUI() {
   const m = 1, rightCol = cols - m - k, bottomRow = BANDS - m - k;
   const lay = (ids, start, row) => ids.forEach((id, i) => place(id, start + i * k, row));
   const scaleCol = Math.floor((cols - k) / 2);
-  // Grouped by what you're doing:
-  //   top centre    — how it sounds: sound, scale, chord/arp/melody, note length
-  //   bottom centre — time: tempo, direction, play, metronome
-  //   bottom left   — the text: size, copy, paste, delete
-  //   bottom right  — help
+  // Corners: direction (top left), help (top right), copy + paste (bottom left), delete (bottom right).
+  // Centre top: how it sounds (sound, scale, mode, length). Centre bottom: tempo | play | size.
   const sound = ['voiceBtn', 'scaleBtn', 'modeBtn', 'lenBtn'];
-  const transport = ['bpmVal', 'dirBtn', 'playBtn', 'metroBtn'];
-  const editing = ['sizeVal', 'copyBtn', 'pasteBtn', 'trash'];
-  const mid = (cols - 4 * k) / 2;                       // cols and 4k are even, so groups of four centre exactly
-  lay(sound, Math.max(m, mid), m);
+  const middle = ['bpmVal', 'playBtn', 'sizeVal'];
+  const mid4 = (cols - 4 * k) / 2;                      // cols even: a group of four sits exactly on the grid
+  const mid3 = (cols - 3 * k) / 2;                      // a group of three is centred on the screen (may sit half a cell off the grid)
+  place('dirBtn', m, m);
+  place('helpBtn', rightCol, m);
+  place('copyBtn', m, bottomRow);
+  place('pasteBtn', m + k, bottomRow);
+  place('trash', rightCol, bottomRow);
+  // top centre: same row as the corners when there is room, otherwise just below
+  const topFits = mid4 >= m + k + 1 && mid4 + 4 * k + 1 <= rightCol;
+  lay(sound, Math.max(m, mid4), topFits ? m : m + k + 1);
+  // bottom centre: same row as copy / paste / delete when there is room, otherwise just above
   let floorRow = bottomRow;                             // highest row of bottom tiles (menus and panels stop above it)
-  lay(editing, m, bottomRow);
-  place('helpBtn', rightCol, bottomRow);
-  if (mid >= m + 4 * k + 1 && mid + 4 * k + 1 <= rightCol) {
-    lay(transport, mid, bottomRow);                     // wide screens: everything on one bottom row
-  } else {
-    floorRow = bottomRow - k - 1;                       // narrow screens: time controls get their own centred row
-    lay(transport, Math.max(m, mid), floorRow);
-  }
-  const helpOnTop = false;
+  if (mid3 >= m + 2 * k + 0.5 && mid3 + 3 * k + 0.5 <= rightCol) lay(middle, mid3, bottomRow);
+  else { floorRow = bottomRow - k - 1; lay(middle, Math.max(m, mid3), floorRow); }
   const tp = POS.trash;
   LAYOUT = { span: k, cellW, cellH, inset, m, rightCol, bottomRow, floorRow, tw, th,
     del: { x0: (tp.col - 0.5) * cellW, y0: (tp.row - 0.5) * cellH, x1: (tp.col + k + 0.5) * cellW, y1: (tp.row + k + 0.5) * cellH } };
@@ -1074,7 +1072,7 @@ function layoutUI() {
 
   // scale menu: grid of tiles hanging under the scale tile, sized so every scale fits on screen
   const names = Object.keys(SCALES);
-  const topIds = ['scaleBtn', 'voiceBtn', 'modeBtn', 'lenBtn'];
+  const topIds = ['scaleBtn', 'voiceBtn', 'modeBtn', 'lenBtn', 'dirBtn', 'helpBtn'];
   const topEnd = Math.max(...topIds.map(id => POS[id].row)) + k + 1;
   const availRows = Math.max(1, Math.floor((floorRow - topEnd) / k));
   const maxCols = Math.max(1, Math.floor((cols - 2 * m) / k));

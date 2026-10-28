@@ -49,6 +49,7 @@ body { margin: 0; overflow: hidden; font-family: var(--sans); -webkit-user-selec
 .tile.ro { cursor: default; }
 .tile.on { background: var(--fg); color: var(--bg); }
 .tile.flash { background: var(--cyan); color: var(--bg); }
+.tile[hidden] { display: none !important; }
 .tile[disabled] { background: var(--tile-off); color: var(--tile-off-fg); cursor: default; }
 .tile:focus-visible { outline: 1px solid var(--cyan); outline-offset: 2px; }
 @media (hover: hover) {
