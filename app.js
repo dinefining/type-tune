@@ -1211,9 +1211,9 @@ const VOICE_ICON = {
   pluck: '<path d="M2 16H7V8H12V16H17V8H22"/>',
 };
 const MODE_ICON = {
-  chord:  '<rect x="9.5" y="1.5" width="5" height="5"/><rect x="9.5" y="9.5" width="5" height="5"/><rect x="9.5" y="17.5" width="5" height="5"/>',
-  arp:    '<rect x="1.5" y="17.5" width="5" height="5"/><rect x="9.5" y="9.5" width="5" height="5"/><rect x="17.5" y="1.5" width="5" height="5"/>',
-  melody: '<rect x="9.5" y="9.5" width="5" height="5"/>',
+  chord:  '<rect x="8.67" y="2" width="6.67" height="6.67"/><rect x="8.67" y="8.67" width="6.67" height="6.67"/><rect x="8.67" y="15.33" width="6.67" height="6.67"/>',
+  arp:    '<rect x="2" y="15.33" width="6.67" height="6.67"/><rect x="8.67" y="8.67" width="6.67" height="6.67"/><rect x="15.33" y="2" width="6.67" height="6.67"/>',
+  melody: '<rect x="8.67" y="8.67" width="6.67" height="6.67"/>',
 };
 const lenIcon = v => { const p = 6 + v * 10, d = p + 2 + v * 1.5; return `M3 20L6 4H${p.toFixed(1)}L${d.toFixed(1)} 20H22`; };
 
@@ -1318,6 +1318,7 @@ function syncUI() {
   }
   $('dirBtn').querySelector('svg').style.transform = `rotate(${DIR_ANGLE[S.mode]}deg)`;
   if (!$('bpmIn')) $('bpmVal').firstElementChild.textContent = S.bpm;
+  $('voiceBtn').innerHTML = VOICE_SHORT[S.voice].split(' ').map(w => `<span>${w}</span>`).join('');
   $('voiceBtn').title = `Sound: ${VOICES[S.voice].label}`;
   $('voiceBtn').setAttribute('aria-label', `Sound: ${VOICES[S.voice].label}`);
   $('modeIcon').innerHTML = MODE_ICON[S.pmode];

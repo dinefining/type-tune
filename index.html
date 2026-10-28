@@ -32,8 +32,8 @@
     <div class="tile ro" id="sizeVal"><span>Size</span></div>
     <button class="tile" id="sizeUp" type="button" aria-label="Larger text" title="Larger text" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M2 12h20"/></svg></button>
     <button class="tile" id="metroBtn" type="button" aria-pressed="false" aria-label="Metronome" title="Metronome"><span>M</span><span>Nome</span></button>
-    <button class="tile" id="voiceBtn" type="button" aria-label="Sound" aria-expanded="false" title="Sound"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8.5" cy="17.5" r="3.4"/><path d="M11.9 17.5V3.5L18 6.5"/></svg></button>
-    <button class="tile" id="scaleBtn" type="button" aria-label="Scale" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="5"/><circle cx="6.8" cy="16.2" r="5"/><circle cx="17.2" cy="16.2" r="5"/></svg></button>
+    <button class="tile" id="voiceBtn" type="button" aria-label="Sound" aria-expanded="false" title="Sound"></button>
+    <button class="tile" id="scaleBtn" type="button" aria-label="Scale" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21V15H9V9H15V3H21V21Z"/></svg></button>
     <button class="tile" id="modeBtn" type="button" aria-label="Chord, arpeggio or melody" title="Chord / arpeggio / melody"><svg viewBox="0 0 24 24" aria-hidden="true" id="modeIcon"></svg></button>
     <button class="tile" id="lenBtn" type="button" aria-label="Note length" aria-expanded="false" title="Note length"><svg viewBox="0 0 24 24" aria-hidden="true"><path id="lenPath" d="M3 20L6 4H16L19 20H22"/></svg></button>
     <button class="tile" id="helpBtn" type="button" aria-label="Help" aria-expanded="false">?</button>
@@ -47,9 +47,7 @@
   <div id="vmenu" role="listbox" aria-label="Sound" hidden></div>
 
   <div id="lenPanel" class="slider" role="slider" aria-label="Note length" aria-valuemin="0" aria-valuemax="100" tabindex="0" hidden>
-    <span class="lab">Leg</span>
     <div class="track"><div class="fill"></div><div class="thumb"></div></div>
-    <span class="lab">Stac</span>
   </div>
 
   <div class="pop" id="pop" hidden>
@@ -63,7 +61,7 @@
       <span>Tap Del, press Delete, or drag text into the bottom-right corner to delete it.</span><br>
       <span>Drag the loop lines to set the playback range.</span><br>
       <span>Click the BPM to type a tempo. Pick a scale from the middle tile.</span><br>
-      <span>Around it: the note tile picks a sound, the squares tile switches between chords, arpeggios and a single melody line, and the envelope tile opens a slider from short, separate notes up to legato.</span><br><br>
+      <span>Around it: the sound tile (showing its name) picks an instrument, the squares tile switches between chords, arpeggios and a single melody line, and the envelope tile opens a slider from short, separate notes up to legato.</span><br><br>
       <span class="credit">A <a href="https://maybemachines.com" target="_blank" rel="noopener" style="color:#D946EF;">Maybe Machine</a> by <a href="https://ravipopat.info" target="_blank" rel="noopener" style="color:#06B6D4;">Ravi Popat</a>.</span>
     </div></div>
   </div>

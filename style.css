@@ -125,7 +125,7 @@ body { margin: 0; overflow: hidden; font-family: var(--sans); -webkit-user-selec
 /* note-length slider: a vertical strip that drops out of the envelope tile */
 .slider {
   position: absolute; z-index: 36; box-sizing: border-box; background: var(--tile-bg);
-  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 0;
+  display: flex; flex-direction: column; align-items: center; padding: calc(var(--t, 48px) * .3) 0;
   font-family: var(--cond); text-transform: uppercase; font-size: calc(var(--t, 48px) * .24); color: var(--muted);
   touch-action: none; cursor: ns-resize; user-select: none;
 }
