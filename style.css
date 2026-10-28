@@ -102,7 +102,7 @@ body { margin: 0; overflow: hidden; font-family: var(--sans); -webkit-user-selec
 .pop-body a:focus-visible { outline: 1px solid var(--cyan); outline-offset: 2px; }
 /* desktop: no INFO strip, just the × tile with the text below it */
 .pop-head { visibility: hidden; }
-#helpBtn { z-index: 45; }
+#helpBtn { z-index: 45; font-size: calc(var(--t) * .58); }
 #helpBtn.open { color: var(--fg); background: var(--tile-bg); }
 @media (max-width: 640px) {
   .pop {

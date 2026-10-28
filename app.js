@@ -975,7 +975,7 @@ function toggleHelp(force) {
   if (open) sizeHelpPanel();
   $('helpBtn').classList.toggle('open', open);
   $('helpBtn').setAttribute('aria-expanded', open);
-  $('helpBtn').innerHTML = open ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l16 16M20 4L4 20"/></svg>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8.5V3.5H17V12H12V16.5"/><path d="M10.6 19.4H13.4V22.2H10.6Z" fill="currentColor"/></svg>';
+  $('helpBtn').innerHTML = open ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l16 16M20 4L4 20"/></svg>' : '?';
   $('helpBtn').setAttribute('aria-label', open ? 'Close help' : 'Help');
 }
 
