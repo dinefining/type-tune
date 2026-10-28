@@ -57,7 +57,6 @@ body { margin: 0; overflow: hidden; font-family: var(--sans); -webkit-user-selec
 }
 .tile:not(.ro):not([disabled]):not(.del):active { background: #404040; }
 #helpBtn { font-size: calc(var(--t) * .58); }
-#bpmVal { cursor: text; }
 #bpmIn {
   width: 100%; box-sizing: border-box; padding: 0; border: 0; outline: 0; background: transparent;
   font: inherit; color: var(--cyan); text-align: center; letter-spacing: inherit; caret-color: var(--cyan);
@@ -70,10 +69,11 @@ body { margin: 0; overflow: hidden; font-family: var(--sans); -webkit-user-selec
 .tile.opt { background: var(--tile-bg); color: var(--fg); }
 .tile.opt.on { background: var(--opt-on); }
 @media (hover: hover) { .tile.opt:not(.on):hover { background: var(--tile-hover) !important; } }
-.del { background: none; color: var(--fg); align-items: center; text-align: center; transition: color .2s, text-shadow .2s; }
-.del.ready { color: var(--fg); }
-.del.hot, .del.hot.ready { color: var(--red); text-shadow: 0 0 10px rgba(239,68,68,.8); }
-@media (hover: hover) { .del.ready:hover { color: var(--red); } }
+#trash.hot { background: var(--red) !important; color: var(--fg) !important; }
+@media (hover: hover) { #trash:not([disabled]):hover { color: var(--red); } }
+/* panels that open upwards from a bottom tile keep their number next to the tile */
+.slider.up { flex-direction: column-reverse; }
+.pop.up { flex-direction: column-reverse; }
 
 /* info: a header strip + text body that opens from the ? tile (desktop); centred on a dark overlay (phones) */
 .pop {

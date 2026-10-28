@@ -9,7 +9,7 @@ const WEIGHT = 400;
 const PLACEHOLDER = 'type here...';
 const SCAN_MODES = ['W_E', 'E_W', 'N_S', 'S_N', 'NW_SE', 'SE_NW', 'NE_SW', 'SW_NE'];
 const MODE_GLYPH = { W_E: '→', E_W: '←', N_S: '↓', S_N: '↑', NW_SE: '↘', SE_NW: '↖', NE_SW: '↙', SW_NE: '↗' };
-let LAYOUT = { delX: Infinity, delY: Infinity };
+let LAYOUT = { del: { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity } };
 let POS = {};
 
 // Scale set and names from TidalCycles (Sound.Tidal.Scales), same as Music of Life
@@ -809,7 +809,7 @@ stage.addEventListener('pointermove', e => {
   if (d.target === 'block') {
     if (!d.moved) return;
     stage.style.cursor = 'move';
-    S.hoverTrash = px > LAYOUT.delX && py > LAYOUT.delY;
+    { const d = LAYOUT.del; S.hoverTrash = px > d.x0 && px < d.x1 && py > d.y0 && py < d.y1; }
     for (const b of S.blocks) {
       const o = d.offsets.get(b.id);
       if (o) { b.x = xP - o.x; b.y = yP - o.y; }
@@ -952,14 +952,17 @@ function sizeHelpPanel() {
   const hp = POS.helpBtn;
   const pcols = Math.min(cols - 2 * m, Math.max(4 * k, Math.round(400 / cellW) - k));   // one tile narrower
   const right = (hp.col + k) * cellW - inset;
+  const up = hp.row > BANDS / 2;                       // ? at the bottom: the panel grows upwards from it
+  pop.classList.toggle('up', up);
   pop.style.left = (right - pcols * cellW + 2 * inset) + 'px';
-  pop.style.top = (hp.row * cellH + inset) + 'px';
   pop.style.width = (pcols * cellW - 2 * inset) + 'px';
   // body height: fit the text, then round up to whole grid cells
   const body = pop.querySelector('.pop-body');
   pop.style.height = 'auto'; body.style.flex = 'none'; body.style.height = 'auto';
   const need = k * cellH + body.scrollHeight + inset;
-  const rows = Math.min(LAYOUT.floorRow - hp.row - 1, Math.ceil(need / cellH));
+  const room = up ? hp.row + k - m : LAYOUT.floorRow - hp.row - 1;
+  const rows = Math.min(room, Math.ceil(need / cellH));
+  pop.style.top = ((up ? hp.row + k - rows : hp.row) * cellH + inset) + 'px';
   pop.style.height = (rows * cellH - 2 * inset) + 'px';
   body.style.flex = ''; body.style.height = '';
 }
@@ -1032,36 +1035,31 @@ function layoutUI() {
     el.style.width = tw + 'px'; el.style.height = th + 'px';
   };
   const m = 1, rightCol = cols - m - k, bottomRow = BANDS - m - k;
-  place('copyBtn', m, bottomRow);
-  place('pasteBtn', m + k, bottomRow);
-  place('trash', rightCol, bottomRow);
-
   const lay = (ids, start, row) => ids.forEach((id, i) => place(id, start + i * k, row));
   const scaleCol = Math.floor((cols - k) / 2);
-  // top: tempo, sound, scale, mode, length, size as one contiguous, centred group
-  const centre = ['bpmVal', 'voiceBtn', 'scaleBtn', 'modeBtn', 'lenBtn', 'sizeVal'];
-  const cStart = (cols - 6 * k) / 2;                    // cols is even and 6k is even, so this lands on the grid
-  const topRow = (_, limit) => {
-    if (cStart >= m && cStart + 6 * k <= limit) { lay(centre, cStart, m); return true; }
-    return false;
-  };
-  const gaps = [2 * k, k, Math.ceil(k / 2), 1, 0];
-  let helpOnTop = true, floorRow = bottomRow;        // floorRow: the highest bottom-row of tiles (menus and panels stop above it)
-  if (topRow(gaps, rightCol - 1)) {
-    place('helpBtn', rightCol, m);                       // desktop: ? top-right; bottom: direction | play | metronome
-    lay(['dirBtn', 'playBtn', 'metroBtn'], Math.floor((cols - 3 * k) / 2), bottomRow);
+  // Grouped by what you're doing:
+  //   top centre    — how it sounds: sound, scale, chord/arp/melody, note length
+  //   bottom centre — time: tempo, direction, play, metronome
+  //   bottom left   — the text: size, copy, paste, delete
+  //   bottom right  — help
+  const sound = ['voiceBtn', 'scaleBtn', 'modeBtn', 'lenBtn'];
+  const transport = ['bpmVal', 'dirBtn', 'playBtn', 'metroBtn'];
+  const editing = ['sizeVal', 'copyBtn', 'pasteBtn', 'trash'];
+  const mid = (cols - 4 * k) / 2;                       // cols and 4k are even, so groups of four centre exactly
+  lay(sound, Math.max(m, mid), m);
+  let floorRow = bottomRow;                             // highest row of bottom tiles (menus and panels stop above it)
+  lay(editing, m, bottomRow);
+  place('helpBtn', rightCol, bottomRow);
+  if (mid >= m + 4 * k + 1 && mid + 4 * k + 1 <= rightCol) {
+    lay(transport, mid, bottomRow);                     // wide screens: everything on one bottom row
   } else {
-    // phones: ? moves next to the metronome; bottom: direction | play | metronome | ?
-    helpOnTop = false;
-    const transport = ['dirBtn', 'playBtn', 'metroBtn', 'helpBtn'], tStart = (cols - 4 * k) / 2;
-    if (tStart >= m + 2 * k && tStart + 4 * k <= rightCol) lay(transport, tStart, bottomRow);
-    else { floorRow = bottomRow - k - 1; lay(transport, tStart, floorRow); }   // its own centred row above copy / paste / DEL
-    if (!topRow(gaps, cols - m)) {                       // very narrow: two rows of three
-      lay(centre.slice(0, 3), Math.max(m, (cols - 3 * k) / 2), m);
-      lay(centre.slice(3), Math.max(m, (cols - 3 * k) / 2), m + k);
-    }
+    floorRow = bottomRow - k - 1;                       // narrow screens: time controls get their own centred row
+    lay(transport, Math.max(m, mid), floorRow);
   }
-  LAYOUT = { span: k, cellW, cellH, inset, m, rightCol, bottomRow, floorRow, tw, th, delX: (rightCol - 1) * cellW, delY: (bottomRow - 1) * cellH };
+  const helpOnTop = false;
+  const tp = POS.trash;
+  LAYOUT = { span: k, cellW, cellH, inset, m, rightCol, bottomRow, floorRow, tw, th,
+    del: { x0: (tp.col - 0.5) * cellW, y0: (tp.row - 0.5) * cellH, x1: (tp.col + k + 0.5) * cellW, y1: (tp.row + k + 0.5) * cellH } };
   const pop = $('pop');
   // help overlay text lines up with the tile grid
   pop.style.setProperty('--pt', (m * cellH + inset) + 'px');
@@ -1076,7 +1074,7 @@ function layoutUI() {
 
   // scale menu: grid of tiles hanging under the scale tile, sized so every scale fits on screen
   const names = Object.keys(SCALES);
-  const topIds = ['bpmVal', 'sizeVal', 'scaleBtn', 'voiceBtn', 'modeBtn', 'lenBtn'];
+  const topIds = ['scaleBtn', 'voiceBtn', 'modeBtn', 'lenBtn'];
   const topEnd = Math.max(...topIds.map(id => POS[id].row)) + k + 1;
   const availRows = Math.max(1, Math.floor((floorRow - topEnd) / k));
   const maxCols = Math.max(1, Math.floor((cols - 2 * m) / k));
@@ -1234,10 +1232,12 @@ function placeSliders() {
   if (!cellW) return;
   for (const key in SLIDERS) {
     const P = POS[SLIDERS[key].tile]; if (!P) continue;
-    const rows = Math.max(3 * k, Math.min(6 * k, floorRow - 1 - (P.row + k)));
-    const el = $(SLIDERS[key].panel);
+    const el = $(SLIDERS[key].panel), up = P.row > BANDS / 2;
+    const room = up ? P.row - (LAYOUT.m + k + 1) : floorRow - 1 - (P.row + k);
+    const rows = Math.max(3 * k, Math.min(6 * k, room));
+    el.classList.toggle('up', up);
     el.style.left = (P.col * cellW + inset) + 'px';
-    el.style.top = ((P.row + k) * cellH + inset) + 'px';
+    el.style.top = ((up ? P.row - rows : P.row + k) * cellH + inset) + 'px';
     el.style.width = (k * cellW - 2 * inset) + 'px';
     el.style.height = (rows * cellH - 2 * inset) + 'px';
   }
@@ -1335,7 +1335,7 @@ function syncUI() {
   $('sizeVal').title = first ? `Text size: ${Math.round(first.fontSize * 100)}` : 'Text size (select text first)';
   $('copyBtn').disabled = !has;
   $('pasteBtn').disabled = clip.length === 0;
-  $('trash').classList.toggle('ready', has);
+  $('trash').disabled = !has && !S.hoverTrash;
   $('trash').classList.toggle('hot', S.hoverTrash);
 }
 

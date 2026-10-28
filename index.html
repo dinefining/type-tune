@@ -25,7 +25,7 @@
 
   <div id="ui">
     <button class="tile" id="dirBtn" type="button" aria-label="Change scan direction" title="Scan direction"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h20M14 4l8 8-8 8"/></svg></button>
-    <button class="tile" id="bpmVal" type="button" aria-label="Tempo" aria-expanded="false" title="Tempo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V9H20V21Z M10 4H14 M12 4V9 M12 15L15.5 11.5"/></svg></button>
+    <button class="tile" id="bpmVal" type="button" aria-label="Tempo" aria-expanded="false" title="Tempo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3H21V21H3Z M12 7V12H16.5"/></svg></button>
     <button class="tile" id="sizeVal" type="button" aria-label="Text size" aria-expanded="false" title="Text size (select text first)" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21V3H21V21Z M3 21V13H11V21Z"/></svg></button>
     <button class="tile" id="metroBtn" type="button" aria-pressed="false" aria-label="Metronome" title="Metronome"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21L9.5 3H14.5L18 21Z M12 17L16.5 7"/></svg></button>
     <button class="tile" id="voiceBtn" type="button" aria-label="Sound" aria-expanded="false" title="Sound"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15H11V21H4Z M11 15V3H19V8H11"/></svg></button>
@@ -33,10 +33,10 @@
     <button class="tile" id="modeBtn" type="button" aria-label="Chord, arpeggio or melody" title="Chord / arpeggio / melody"><svg viewBox="0 0 24 24" aria-hidden="true" id="modeIcon"></svg></button>
     <button class="tile" id="lenBtn" type="button" aria-label="Note length" aria-expanded="false" title="Note length"><svg viewBox="0 0 24 24" aria-hidden="true"><path id="lenPath" d="M3 20L6 4H16L19 20H22"/></svg></button>
     <button class="tile" id="helpBtn" type="button" aria-label="Help" aria-expanded="false">?</button>
-    <button class="tile" id="copyBtn" type="button" disabled>Copy</button>
-    <button class="tile" id="pasteBtn" type="button" disabled>Paste</button>
+    <button class="tile" id="copyBtn" type="button" aria-label="Copy" title="Copy" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8H21V21H8Z M16 8V3H3V16H8"/></svg></button>
+    <button class="tile" id="pasteBtn" type="button" aria-label="Paste" title="Paste" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5H19V21H5Z M9 3H15V7H9Z"/></svg></button>
     <button class="tile" id="playBtn" type="button" aria-label="Play"></button>
-    <button class="tile del" id="trash" type="button" aria-label="Delete selected text"><span>Del</span></button>
+    <button class="tile" id="trash" type="button" aria-label="Delete selected text" title="Delete (or drag text onto it)" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7H21 M9 7V3H15V7 M5 7V21H19V7 M10 11V17 M14 11V17"/></svg></button>
   </div>
 
   <div id="menu" role="listbox" aria-label="Scale" hidden></div>
@@ -62,10 +62,10 @@
       <span>Hit play or space to convert text to tune.</span><br>
       <span>Click and draw over an area to select multiple items.</span><br>
       <span>Copy and Paste duplicate the selection. Or hold Alt/Opt and drag.</span><br>
-      <span>Tap Del, press Delete, or drag text into the bottom-right corner to delete it.</span><br>
+      <span>Tap the bin, press Delete, or drag text onto the bin to delete it.</span><br>
       <span>Drag the loop lines to set the playback range.</span><br>
-      <span>The stopwatch (tempo) and the squares (text size) open sliders: drag, or tap the number to type one. The metronome icon toggles the click.</span><br>
-      <span>Around it: the sound tile (showing its name) picks an instrument, the squares tile switches between chords, arpeggios and a single melody line, and the envelope tile opens a slider from short, separate notes up to legato.</span><br><br>
+      <span>Top: how it sounds (sound, scale, chord / arpeggio / melody, note length). Bottom centre: tempo, direction, play, metronome. Bottom left: text size, copy, paste, delete.</span><br>
+      <span>Tempo and size open sliders: drag, or tap the number to type one.</span><br><br>
       <span class="credit">A <a href="https://maybemachines.com" target="_blank" rel="noopener" style="color:#D946EF;">Maybe Machine</a> by <a href="https://ravipopat.info" target="_blank" rel="noopener" style="color:#06B6D4;">Ravi Popat</a>.</span>
     </div></div>
   </div>
