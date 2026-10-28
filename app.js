@@ -98,6 +98,7 @@ const MODES = {
   melody: { label: 'Melody' },   // only the highest note: the top outline of the text becomes a melody line
 };
 const VOICE_ORDER = Object.keys(VOICES), MODE_ORDER = Object.keys(MODES);
+const VOICE_SHORT = { keys: 'Keys', pad: 'Pad', bell: 'Bell', organ: 'Or Gan', wood: 'Wood', pluck: 'Plu Ck' };
 
 const audio = {
   ctx: null, master: null, comp: null, wet: null, dry: null, bands: [], held: [], running: false,
@@ -276,14 +277,24 @@ const audio = {
       return;
     }
 
-    // arpeggio: each run of adjacent notes (one letter stroke) plays its top note, low to high across the step
+    // arpeggio: every stroke (run of adjacent notes) gives its bottom, middle and top note;
+    // those notes are spread across the step, going up on one step and down on the next
     let notes = [];
-    for (let i = 0; i < active.length; i++) {
-      if (i === active.length - 1 || active[i + 1] !== active[i] + 1) notes.push(active[i]);
+    for (let i = 0, lo = -1; i < active.length; i++) {
+      if (lo < 0) lo = active[i];
+      if (i === active.length - 1 || active[i + 1] !== active[i] + 1) {
+        const hi = active[i], len = hi - lo + 1;
+        if (len === 1) notes.push(lo);
+        else if (len <= 3) notes.push(lo, hi);
+        else notes.push(lo, Math.round((lo + hi) / 2), hi);
+        lo = -1;
+      }
     }
     const MAX = 6;
     if (notes.length > MAX) notes = Array.from({ length: MAX }, (_, i) => notes[Math.round(i * (notes.length - 1) / (MAX - 1))]);
     if (!notes.length) return;
+    this.arpUp = !this.arpUp;
+    if (!this.arpUp) notes.reverse();
     const slot = stepSec / notes.length;
     const AP = { gate: P.gate, tie: false, rel: P.rel };     // arp notes never tie; the slider sets how much they overlap
     notes.forEach((j, n) => this.noteOn(this.bands[j], now + n * slot, vel(j), slot, AP));
@@ -705,6 +716,7 @@ function nearLoop(px, py) {
 stage.addEventListener('pointerdown', e => {
   if (e.button !== 0) return;
   if (!$('lenPanel').hidden) { toggleLen(false); e.preventDefault(); return; }
+  if (!$('vmenu').hidden) { toggleVoiceMenu(false); e.preventDefault(); return; }
   if (!$('menu').hidden) { toggleMenu(false); e.preventDefault(); return; }
   if (!$('pop').hidden) { toggleHelp(false); e.preventDefault(); return; }
   e.preventDefault();
@@ -879,6 +891,7 @@ stage.addEventListener('pointercancel', pointerEnd);
 window.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (!$('lenPanel').hidden) { toggleLen(false); return; }
+    if (!$('vmenu').hidden) { toggleVoiceMenu(false); return; }
     if (!$('menu').hidden) { toggleMenu(false); return; }
     if (!$('pop').hidden) { toggleHelp(false); return; }
     endEdit();
@@ -1019,6 +1032,7 @@ function layoutUI() {
   const tw = k * cellW - 2 * inset, th = k * cellH - 2 * inset;
   $('ui').style.setProperty('--t', Math.min(tw, th) + 'px');
   $('menu').style.setProperty('--t', Math.min(tw, th) + 'px');
+  $('vmenu').style.setProperty('--t', Math.min(tw, th) + 'px');
   $('lenPanel').style.setProperty('--t', Math.min(tw, th) + 'px');
   const placeEl = (el, col, row) => {
     el.style.transform = `translate(${col * cellW + inset}px, ${row * cellH + inset}px)`;
@@ -1096,10 +1110,14 @@ function layoutUI() {
   const nrows = Math.ceil(names.length / ncols);
   const menuW = ncols * k, menuH = nrows * k;
   const startCol = Math.max(m, Math.floor((cols - menuW) / 2));
-  const startRow = Math.max(topEnd, Math.min(bottomRow - 1 - menuH, Math.floor((BANDS - menuH) / 2)));
+  const startRow = topEnd - 1;                    // directly under the top tiles
   [...$('menu').children].forEach((el, i) => {
     placeEl(el, startCol + (i % ncols) * k, startRow + Math.floor(i / ncols) * k);
   });
+  // sound menu: one row (or more on narrow screens) of name tiles, centred under the top tiles
+  const vItems = [...$('vmenu').children], vcols = Math.min(maxCols, vItems.length);
+  const vStart = Math.max(m, Math.floor((cols - vcols * k) / 2));
+  vItems.forEach((el, i) => placeEl(el, vStart + (i % vcols) * k, startRow + Math.floor(i / vcols) * k));
   fitScaleLabel();
   placeLenPanel();
 }
@@ -1134,7 +1152,7 @@ function setScale(name) {
 function toggleMenu(force) {
   const menu = $('menu');
   const open = typeof force === 'boolean' ? force : menu.hidden;
-  if (open) { toggleHelp(false); toggleLen(false); }
+  if (open) { toggleHelp(false); toggleLen(false); toggleVoiceMenu(false); }
   menu.hidden = !open;
   $('scaleBtn').classList.toggle('open', open);
   $('scaleBtn').setAttribute('aria-expanded', open);
@@ -1168,7 +1186,7 @@ function editBpm() {
 
 // keep chrome clicks from reaching the canvas or stealing the text caret
 stage.addEventListener('mousedown', e => e.preventDefault());
-for (const el of [$('ui'), $('pop'), $('menu'), $('lenPanel')]) {
+for (const el of [$('ui'), $('pop'), $('menu'), $('vmenu'), $('lenPanel')]) {
   el.addEventListener('mousedown', e => { if (S.editingId) e.preventDefault(); });
 }
 $('playBtn').onclick = togglePlay;
@@ -1193,9 +1211,9 @@ const VOICE_ICON = {
   pluck: '<path d="M2 16H7V8H12V16H17V8H22"/>',
 };
 const MODE_ICON = {
-  chord:  '<circle cx="12" cy="4.6" r="3.4"/><circle cx="12" cy="12" r="3.4"/><circle cx="12" cy="19.4" r="3.4"/>',
-  arp:    '<circle cx="4.6" cy="19.4" r="3.4"/><circle cx="12" cy="12" r="3.4"/><circle cx="19.4" cy="4.6" r="3.4"/>',
-  melody: '<circle cx="8.5" cy="17.5" r="3.4"/><path d="M11.9 17.5V3.5L18 6.5"/>',
+  chord:  '<rect x="9.5" y="1.5" width="5" height="5"/><rect x="9.5" y="9.5" width="5" height="5"/><rect x="9.5" y="17.5" width="5" height="5"/>',
+  arp:    '<rect x="1.5" y="17.5" width="5" height="5"/><rect x="9.5" y="9.5" width="5" height="5"/><rect x="17.5" y="1.5" width="5" height="5"/>',
+  melody: '<rect x="9.5" y="9.5" width="5" height="5"/>',
 };
 const lenIcon = v => { const p = 6 + v * 10, d = p + 2 + v * 1.5; return `M3 20L6 4H${p.toFixed(1)}L${d.toFixed(1)} 20H22`; };
 
@@ -1217,11 +1235,27 @@ function previewSound() {
   phrase.forEach((notes, n) => previewTimers.push(setTimeout(() => audio.update(rowsFor(notes), step), n * step * 1000)));
   previewTimers.push(setTimeout(() => { audio.update(new Array(BANDS).fill(0), step); audio.running = S.playing; }, phrase.length * step * 1000));
 }
-$('voiceBtn').onclick = () => {
-  S.voice = VOICE_ORDER[(VOICE_ORDER.indexOf(S.voice) + 1) % VOICE_ORDER.length];
-  audio.setVoice(S.voice);
-  syncUI(); previewSound();
-};
+function buildVoiceMenu() {
+  const vm = $('vmenu');
+  vm.innerHTML = VOICE_ORDER.map(v =>
+    `<button class="tile opt" type="button" role="option" data-voice="${v}" aria-label="${VOICES[v].label}" title="${VOICES[v].label}">` +
+    VOICE_SHORT[v].split(' ').map(w => `<span>${w}</span>`).join('') + `</button>`).join('');
+  vm.addEventListener('click', e => {
+    const b = e.target.closest('.opt'); if (!b) return;
+    S.voice = b.dataset.voice; audio.setVoice(S.voice);
+    toggleVoiceMenu(false); syncUI(); previewSound();
+  });
+}
+function toggleVoiceMenu(force) {
+  const vm = $('vmenu'), open = typeof force === 'boolean' ? force : vm.hidden;
+  if (open) { toggleMenu(false); toggleHelp(false); toggleLen(false); }
+  vm.hidden = !open;
+  $('voiceBtn').classList.toggle('open', open);
+  $('voiceBtn').setAttribute('aria-expanded', open);
+  vm.querySelectorAll('.opt').forEach(o => { const on = o.dataset.voice === S.voice; o.classList.toggle('on', on); o.setAttribute('aria-selected', on); });
+}
+buildVoiceMenu();
+$('voiceBtn').onclick = () => toggleVoiceMenu();
 $('modeBtn').onclick = () => {
   S.pmode = MODE_ORDER[(MODE_ORDER.indexOf(S.pmode) + 1) % MODE_ORDER.length];
   audio.setMode(S.pmode);
@@ -1241,7 +1275,7 @@ function placeLenPanel() {
 }
 function toggleLen(force) {
   const el = $('lenPanel'), open = typeof force === 'boolean' ? force : el.hidden;
-  if (open) { toggleMenu(false); toggleHelp(false); placeLenPanel(); }
+  if (open) { toggleMenu(false); toggleHelp(false); toggleVoiceMenu(false); placeLenPanel(); }
   el.hidden = !open;
   $('lenBtn').classList.toggle('open', open);
   $('lenBtn').setAttribute('aria-expanded', open);
@@ -1268,7 +1302,7 @@ $('lenBtn').onclick = () => toggleLen();
 })();
 $('pasteBtn').onclick = pasteClip;
 $('trash').onclick = deleteSelection;
-$('helpBtn').onclick = () => { toggleMenu(false); toggleHelp(); };
+$('helpBtn').onclick = () => { toggleMenu(false); toggleVoiceMenu(false); toggleHelp(); };
 $('scaleBtn').onclick = () => toggleMenu();
 $('bpmVal').onclick = editBpm;
 
@@ -1284,7 +1318,6 @@ function syncUI() {
   }
   $('dirBtn').querySelector('svg').style.transform = `rotate(${DIR_ANGLE[S.mode]}deg)`;
   if (!$('bpmIn')) $('bpmVal').firstElementChild.textContent = S.bpm;
-  $('voiceIcon').innerHTML = VOICE_ICON[S.voice];
   $('voiceBtn').title = `Sound: ${VOICES[S.voice].label}`;
   $('voiceBtn').setAttribute('aria-label', `Sound: ${VOICES[S.voice].label}`);
   $('modeIcon').innerHTML = MODE_ICON[S.pmode];

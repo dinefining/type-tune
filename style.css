@@ -65,8 +65,8 @@ body { margin: 0; overflow: hidden; font-family: var(--sans); -webkit-user-selec
 #scaleBtn.open { background: var(--fg); color: var(--bg); }
 
 /* scale menu: a block of grid tiles that drops out of the scale tile */
-#menu { position: absolute; inset: 0; z-index: 35; pointer-events: none; }
-#menu[hidden] { display: none !important; }
+#menu, #vmenu { position: absolute; inset: 0; z-index: 35; pointer-events: none; }
+#menu[hidden], #vmenu[hidden] { display: none !important; }
 .tile.opt { background: var(--tile-bg); color: var(--fg); }
 .tile.opt.on { background: var(--opt-on); }
 @media (hover: hover) { .tile.opt:not(.on):hover { background: var(--tile-hover) !important; } }
@@ -135,4 +135,5 @@ body { margin: 0; overflow: hidden; font-family: var(--sans); -webkit-user-selec
 .slider .fill { position: absolute; left: 0; right: 0; bottom: 0; background: var(--fg); }
 .slider .thumb { position: absolute; left: 50%; width: calc(var(--t, 48px) * .56); height: 3px; background: var(--fg); transform: translate(-50%, 50%); }
 #lenBtn.open, #modeBtn.open { background: var(--opt-on); }
+#voiceBtn.open { background: var(--fg); color: var(--bg); }
 .tile svg circle { fill: none; }
