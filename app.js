@@ -975,8 +975,8 @@ function toggleHelp(force) {
   if (open) sizeHelpPanel();
   $('helpBtn').classList.toggle('open', open);
   $('helpBtn').setAttribute('aria-expanded', open);
-  $('helpBtn').innerHTML = open ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l16 16M20 4L4 20"/></svg>' : '?';
-  $('helpBtn').setAttribute('aria-label', open ? 'Close help' : 'Help');
+  $('helpBtn').innerHTML = open ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l16 16M20 4L4 20"/></svg>' : 'Info';
+  $('helpBtn').setAttribute('aria-label', open ? 'Close info' : 'Info');
 }
 
 /* copy / paste (an in-app clipboard of whole text blocks) */

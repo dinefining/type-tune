@@ -57,7 +57,6 @@ body { margin: 0; overflow: hidden; font-family: var(--sans); -webkit-user-selec
   .tile.on:hover { background: #dcdcdc !important; }
 }
 .tile:not(.ro):not([disabled]):not(.del):active { background: #404040; }
-#helpBtn { font-size: calc(var(--t) * .58); }
 #bpmIn {
   width: 100%; box-sizing: border-box; padding: 0; border: 0; outline: 0; background: transparent;
   font: inherit; color: var(--cyan); text-align: center; letter-spacing: inherit; caret-color: var(--cyan);
